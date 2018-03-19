@@ -261,6 +261,7 @@ class Config(object):
 	def run(self):
 		if self.importName != None:
 			self.restore_pytorch()
+                self.learning_log = []
 		for epoch in range(self.train_times):
 			res = 0.0
 			for batch in range(self.nbatches):
@@ -273,8 +274,8 @@ class Config(object):
 			if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
 				self.save_pytorch()
 			if self.log_on == 1:
-				print epoch
-				print res
+				print "Epoch: {}, Loss: {}".format(epoch, res)
+                                self.learning_log.append((epoch, res))
 		if self.exportName != None:
 			self.save_pytorch()
 		if self.out_path != None:
