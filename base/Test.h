@@ -171,9 +171,8 @@ REAL *relThresh;
 REAL threshEntire;
 extern "C"
 void getBestThreshold(REAL *score_pos, REAL *score_neg) {
-    REAL interval = 0.01;
     relThresh = (REAL *)calloc(relationTotal, sizeof(REAL));
-    REAL min_score, max_score, bestThresh, tmpThresh, bestAcc, tmpAcc;
+    REAL interval, min_score, max_score, bestThresh, tmpThresh, bestAcc, tmpAcc;
     INT n_interval, correct, total;
     for (INT r = 0; r < relationTotal; r++) {
         if (validLef[r] == -1) continue;
@@ -188,8 +187,9 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
             if(score_neg[i] < min_score) min_score = score_neg[i];
             if(score_neg[i] > max_score) max_score = score_neg[i];
         }
+        interval = (max_score - min_score)/1000; // defining the interval this way is more portable accross different kinds of models
         n_interval = INT((max_score - min_score)/interval);
-        for (INT i = 0; i <= n_interval; i++) {
+        for (INT i = -1; i <= n_interval+1; i++) { // we should start the search BEFORE the min score and end it AFTER the max score, in case validation triples are all positive or negative.
             tmpThresh = min_score + i * interval;
             correct = 0;
             for (INT j = validLef[r]; j <= validRig[r]; j++) {
@@ -207,6 +207,7 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
         }
         relThresh[r] = bestThresh;
         printf("relation %ld: bestThresh is %lf, bestAcc is %lf\n", r, bestThresh, bestAcc);
+        printf("[debug] min_score for relation above was %lf\n", min_score);
     }
 }
 
