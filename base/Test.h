@@ -206,8 +206,7 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
             }
         }
         relThresh[r] = bestThresh;
-        printf("relation %ld: bestThresh is %lf, bestAcc is %lf\n", r, bestThresh, bestAcc);
-        printf("[debug] min_score for relation above was %lf\n", min_score);
+        printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
     }
 }
 
