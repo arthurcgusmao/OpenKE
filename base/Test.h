@@ -216,7 +216,6 @@ extern "C"
 void test_triple_classification(REAL *score_pos, REAL *score_neg) {
     testAcc = (REAL *)calloc(relationTotal, sizeof(REAL));
     INT aveCorrect = 0, aveTotal = 0;
-    REAL aveAcc;
     for (INT r = 0; r < relationTotal; r++) {
         if (validLef[r] == -1 || testLef[r] ==-1) continue;
         INT correct = 0, total = 0;
