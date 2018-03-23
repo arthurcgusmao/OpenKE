@@ -212,14 +212,18 @@ INT tail_type[1000000];
 
 extern "C"
 void importTypeFiles() {
+    // the type_constrain.txt file is a file that have two lines for each relation: the first line references all entities that are head of the relation; the second one references all entities that are tail.
+    //     - column 1 contains the relation id
+    //     - column 2 contains the number of entities that are head (or tail)
+    //     - column 3 and beyond contain the entities ids
 	INT total_lef = 0;
     INT total_rig = 0;
     FILE* f_type = fopen((inPath + "type_constrain.txt").c_str(),"r");
     INT tmp;
-    tmp = fscanf(f_type, "%ld", &tmp);
+    tmp = fscanf(f_type, "%ld", &tmp); // gets rid of the first line (which has only one floating value)
     for (INT i = 0; i < relationTotal; i++) {
         INT rel, tot;
-        tmp = fscanf(f_type, "%ld%ld", &rel, &tot);
+        tmp = fscanf(f_type, "%ld%ld", &rel, &tot); // reads first (relation) and second (number of entities) columns
         head_lef[rel] = total_lef;
         for (INT j = 0; j < tot; j++) {
             tmp = fscanf(f_type, "%ld", &head_type[total_lef]);
