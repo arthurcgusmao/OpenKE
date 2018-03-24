@@ -85,3 +85,24 @@ def generate_type_constrain_file(dataset_path='./', fname='/type_constrain.txt')
             f.write('\t'.join(line)) # tab-separate everything
             f.write('\n')
     
+
+def read_type_constrain_file(filepath):
+    """Parses a type_constrain file into a dict.
+    """
+    with open(filepath, 'r') as f:
+        content = f.read()
+        content = content.split('\n')[:-1]
+        del content[0] # remove the first line
+        content = [line.split('\t') for line in content]
+        content = [[int(item) for item in line] for line in content]
+        output = {}
+        last_rel = None
+        for line in content:
+            rel = line[0]
+            entities = line[2:]
+            if not rel == last_rel:
+                output[rel] = {'head': set(entities)}
+            else:
+                output[rel]['tail'] = set(entities)
+            last_rel = rel
+    return output
