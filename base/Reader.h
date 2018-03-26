@@ -224,13 +224,15 @@ void importTypeFiles() {
     for (INT i = 0; i < relationTotal; i++) {
         INT rel, tot;
         tmp = fscanf(f_type, "%ld%ld", &rel, &tot); // reads first (relation) and second (number of entities) columns
-        head_lef[rel] = total_lef;
+        head_lef[rel] = total_lef; // `head_lef` stores for each relation the first index of its entities type in `head_type`
         for (INT j = 0; j < tot; j++) {
             tmp = fscanf(f_type, "%ld", &head_type[total_lef]);
-            total_lef++;
+            total_lef++; 
         }
-        head_rig[rel] = total_lef;
+        head_rig[rel] = total_lef; // `head_rig` stores for each relation the last index of its entities in `head_type`
         std::sort(head_type + head_lef[rel], head_type + head_rig[rel]);
+        // head_type stores the entity ids that are head of a relation. Which relation it is is accessible through the `head_lef` and `head_rig` described above.
+        
         tmp = fscanf(f_type, "%ld%ld", &rel, &tot);
         tail_lef[rel] = total_rig;
         for (INT j = 0; j < tot; j++) {
