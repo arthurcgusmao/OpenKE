@@ -25,7 +25,7 @@ INT rand_max(INT id, INT x) {
 }
 
 //[a,b)
-INT rand(INT a, INT b){
+INT rand(INT a, INT b){ // returns a random number between [a, b)
 	return (rand() % (b-a))+ a;
 }
 #endif

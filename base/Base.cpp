@@ -84,7 +84,7 @@ void* getBatch(void* con) {
 		batch_y[batch] = 1;
 		INT last = batchSize;
 		for (INT times = 0; times < negRate; times ++) {
-			if (bernFlag)
+			if (bernFlag) // bernFlag signals that we should use the Bernoulli distribution for creating negative examples proposed by Wang el al. (2014).
 				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]);
 			if (randd(id) % 1000 < prob) {
 				batch_h[batch + last] = trainList[i].h;
