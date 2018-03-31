@@ -3,6 +3,7 @@
 #include "Setting.h"
 #include "Reader.h"
 #include "Corrupt.h"
+#include <fstream>
 
 /*=====================================================================================
 link prediction
@@ -108,37 +109,90 @@ void test_link_prediction() {
 /*=====================================================================================
 triple classification
 ======================================================================================*/
-Triple *negTestList;
-extern "C"
-void getNegTest() {
-    negTestList = (Triple *)calloc(testTotal, sizeof(Triple));
-    for (INT i = 0; i < testTotal; i++) {
-        negTestList[i] = testList[i];
-        negTestList[i].t = corrupt(testList[i].h, testList[i].r);
-    }
-    FILE* fout = fopen((inPath + "test_neg.txt").c_str(), "w");
-    for (INT i = 0; i < testTotal; i++) {
-        fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", testList[i].h, testList[i].t, testList[i].r, INT(1));
-        fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", negTestList[i].h, negTestList[i].t, negTestList[i].r, INT(-1));
-    }
-    fclose(fout);
+bool file_exists(const char *filename)
+{
+  std::ifstream ifile(filename);
+  return ifile;
 }
 
+Triple *negTestList;
+extern "C"
+void importNegTestFiles() {
+    FILE *fin;
+    INT tmp;
+
+    FILE* f_kb4 = fopen((inPath + "test2id_neg.txt").c_str(), "r");
+    tmp = fscanf(f_kb4, "%ld", &testTotal);
+    negTestList = (Triple *)calloc(testTotal, sizeof(Triple));
+    for (INT i = 0; i < testTotal; i++) {
+        tmp = fscanf(f_kb4, "%ld", &negTestList[i].h);
+        tmp = fscanf(f_kb4, "%ld", &negTestList[i].t);
+        tmp = fscanf(f_kb4, "%ld", &negTestList[i].r);
+    }
+    fclose(f_kb4);
+
+	// the sorting of the negative lists will ensure that triple classification happens correctly
+    std::sort(negTestList, negTestList + testTotal, Triple::cmp_rel2);
+}
 Triple *negValidList;
 extern "C"
-void getNegValid() {
+void importNegValidFiles() {
+    FILE *fin;
+    INT tmp;
+
+    FILE* f_kb5 = fopen((inPath + "valid2id_neg.txt").c_str(), "r");
+    tmp = fscanf(f_kb5, "%ld", &validTotal);
     negValidList = (Triple *)calloc(validTotal, sizeof(Triple));
-    for (INT i = 0; i < validTotal; i++) {
-        negValidList[i] = validList[i];
-        negValidList[i].t = corrupt(validList[i].h, validList[i].r);
+	for (INT i = 0; i < validTotal; i++) {
+        tmp = fscanf(f_kb5, "%ld", &negValidList[i].h);
+        tmp = fscanf(f_kb5, "%ld", &negValidList[i].t);
+        tmp = fscanf(f_kb5, "%ld", &negValidList[i].r);
     }
-    FILE* fout = fopen((inPath + "valid_neg.txt").c_str(), "w");
-    for (INT i = 0; i < validTotal; i++) {
-        fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", validList[i].h, validList[i].t, validList[i].r, INT(1));
-        fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", negValidList[i].h, negValidList[i].t, negValidList[i].r, INT(-1));
+    fclose(f_kb5);
+
+	// the sorting of the negative lists will ensure that triple classification happens correctly
+    std::sort(negValidList, negValidList + validTotal, Triple::cmp_rel2);
+}
+
+// Triple *negTestList;
+extern "C"
+void getNegTest() {
+    if (file_exists((inPath + "test2id_neg.txt").c_str())) {
+        importNegTestFiles(); // function defined in Reader.h
+    } else {
+        negTestList = (Triple *)calloc(testTotal, sizeof(Triple));
+        for (INT i = 0; i < testTotal; i++) {
+            negTestList[i] = testList[i];
+            negTestList[i].t = corrupt(testList[i].h, testList[i].r);
+        }
+        FILE* fout = fopen((inPath + "test_neg.txt").c_str(), "w");
+        for (INT i = 0; i < testTotal; i++) {
+            fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", testList[i].h, testList[i].t, testList[i].r, INT(1));
+            fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", negTestList[i].h, negTestList[i].t, negTestList[i].r, INT(-1));
+        }
+        fclose(fout);
     }
-    fclose(fout);
-        
+    // set value for new variables
+}
+
+// Triple *negValidList;
+extern "C"
+void getNegValid() {
+    if (file_exists((inPath + "valid2id_neg.txt").c_str())) {
+        importNegValidFiles(); // function defined in Reader.h
+    } else {
+        negValidList = (Triple *)calloc(validTotal, sizeof(Triple));
+        for (INT i = 0; i < validTotal; i++) {
+            negValidList[i] = validList[i];
+            negValidList[i].t = corrupt(validList[i].h, validList[i].r);
+        }
+        FILE* fout = fopen((inPath + "valid_neg.txt").c_str(), "w");
+        for (INT i = 0; i < validTotal; i++) {
+            fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", validList[i].h, validList[i].t, validList[i].r, INT(1));
+            fprintf(fout, "%ld\t%ld\t%ld\t%ld\n", negValidList[i].h, negValidList[i].t, negValidList[i].r, INT(-1));
+        }
+        fclose(fout);
+    }
 }
 
 extern "C"
@@ -225,7 +279,7 @@ void test_triple_classification(REAL *score_pos, REAL *score_neg) {
             total += 2;
         }
         testAcc[r] = 1.0 * correct / total;
-        aveCorrect += correct; 
+        aveCorrect += correct;
         aveTotal += total;
         printf("relation %ld: triple classification accuracy is %lf\n", r, testAcc[r]);
     }
