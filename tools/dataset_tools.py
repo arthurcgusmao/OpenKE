@@ -38,7 +38,8 @@ def read_name2id_file(fpath, sep='\t', skiprows=1, id_first=False):
 
 
 def generate_name2id_files(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'valid.txt'],
-                           order=['head', 'relation', 'tail'], sep='\t', skiprows=0):
+                           order=['head', 'relation', 'tail'], sep='\t', skiprows=0,
+                           labels=[]):
     """Generates two files that maps names (of entities and relations) to ids
     (i.e., it encodes each name for entities and relations observed in the input
     files into numbers (ids)).
@@ -49,10 +50,18 @@ def generate_name2id_files(dataset_dirpath, names_fname=['train.txt', 'test.txt'
     Arguments:
     - dataset_dirpath: path to the dataset directory where all files should be in.
     - names_fpath: should be a list of file names (e.g., train.txt, test.txt, valid.txt).
+    - labels: indicates which files have labels in the last row, so the function know what is the
+    correct thing to do.
     """
     data = pd.DataFrame()
     for fname in names_fname:
-        df = pd.read_csv(dataset_dirpath + fname, sep=sep, skiprows=skiprows, names=order)
+        if fname in labels:
+            _order = order + ['label']
+        else:
+            _order = order
+        df = pd.read_csv(dataset_dirpath + fname, sep=sep, skiprows=skiprows, names=_order)
+        if fname in labels:
+            del df['label']
         data = pd.concat([data, df])
 
     relations = data['relation'].unique()
@@ -69,7 +78,8 @@ def generate_name2id_files(dataset_dirpath, names_fname=['train.txt', 'test.txt'
 
 
 def generate_fold2id_files(dataset_dirpath, folds_fname=['train.txt', 'test.txt', 'valid.txt'],
-                           extension='.txt', order=['head', 'relation', 'tail'], sep='\t', skiprows=0):
+                           extension='.txt', order=['head', 'relation', 'tail'], sep='\t',
+                           skiprows=0, labels=[]):
     """Generates one fold2id file for each inputted fold file (e.g., for train.txt it will
     generate a train2id.txt file). It presupposes that there will be already two files in the
     dataset that map names to ids: `entity2id.txt` and `relation2id.txt`. The fold2id files
@@ -80,21 +90,50 @@ def generate_fold2id_files(dataset_dirpath, folds_fname=['train.txt', 'test.txt'
     - folds_fpath: should be a list of fold file names (e.g., train.txt, test.txt, valid.txt).
     - order: the order that the triple is written in each line of the fold files. They should always
     be head, tail and relation, only the order that should change.
+    - labels: indicates which files have labels in the last row, and that the function will
+    generate two output files for each of those files (e.g., test2id.txt and test2id_neg.txt),
+    one for positive and another for negative examples.
     """
     entity2id, _ = read_name2id_file(dataset_dirpath + 'entity2id.txt')
     relation2id, _ = read_name2id_file(dataset_dirpath + 'relation2id.txt')
 
     for fname in folds_fname:
         fold2id_fname = fname.replace(extension, '2id' + extension) # get the output filename
-        df = pd.read_csv(dataset_dirpath + fname, sep=sep, skiprows=skiprows, names=order)
+        neg_fold2id_fname = fname.replace(extension, '2id_neg' + extension) # get the negative output filename
+        # check the existence of labels
+        if fname in labels:
+            _order = order + ['label']
+        else:
+            _order = order
+        df = pd.read_csv(dataset_dirpath + fname, sep=sep, skiprows=skiprows, names=_order)
         df['head'] = df['head'].map(entity2id)
         df['tail'] = df['tail'].map(entity2id)
         df['relation'] = df['relation'].map(relation2id)
-        df.to_csv(dataset_dirpath + fold2id_fname, columns=['head', 'tail', 'relation'],
-                  index=False, header=False, sep=' ')
-        # insert row number in the beginning of file
-        with open(dataset_dirpath + fold2id_fname, 'r') as f: content = f.read()
-        with open(dataset_dirpath + fold2id_fname, 'w') as f: f.write("{}\n".format(len(df)) + content)
+
+        if fname in labels: # for the case with labels
+            # separate the dataframes into positive and negative if labels exist
+            pos_df = df.loc[df['label'] == 1]
+            neg_df = df.loc[df['label'] == -1]
+            del pos_df['label']
+            del neg_df['label']
+            # write to csv files
+            pos_df.to_csv(dataset_dirpath + fold2id_fname, columns=['head', 'tail', 'relation'],
+                          index=False, header=False, sep=' ')
+            neg_df.to_csv(dataset_dirpath + neg_fold2id_fname, columns=['head', 'tail', 'relation'],
+                          index=False, header=False, sep=' ')
+            # insert row number in the beginning of files
+            with open(dataset_dirpath + fold2id_fname, 'r') as f: content = f.read()
+            with open(dataset_dirpath + fold2id_fname, 'w') as f: f.write("{}\n".format(len(pos_df)) + content)
+            with open(dataset_dirpath + neg_fold2id_fname, 'r') as f: content = f.read()
+            with open(dataset_dirpath + neg_fold2id_fname, 'w') as f: f.write("{}\n".format(len(neg_df)) + content)
+
+        else: # for the case without labels
+            df.to_csv(dataset_dirpath + fold2id_fname, columns=['head', 'tail', 'relation'],
+                      index=False, header=False, sep=' ')
+            # insert row number in the beginning of file
+            with open(dataset_dirpath + fold2id_fname, 'r') as f: content = f.read()
+            with open(dataset_dirpath + fold2id_fname, 'w') as f: f.write("{}\n".format(len(df)) + content)
+
 
 
 def generate_type_constrain_file(dataset_path='./', fname='/type_constrain.txt'):
@@ -170,3 +209,35 @@ def read_type_constrain_file(filepath):
                 output[rel]['tail'] = set(entities)
             last_rel = rel
     return output
+
+
+def ensure_one_to_one_negative_examples(dataset_path):
+    """The goal of this function is to ensure that for each positive observation
+    in the dataset there was generated exactly one negative observation by
+    corrupting the triple. It also ensures that the observations follow the same
+    order.
+
+    It presupposes that there are the `test2id.txt` and `test2id_neg.txt` (or valid) files.
+    """
+    test_fpath = dataset_path + '/test2id.txt'
+    valid_fpath = dataset_path + '/valid2id.txt'
+    test_neg_fpath = dataset_path + '/test2id_neg.txt'
+    valid_neg_fpath = dataset_path + '/valid2id_neg.txt'
+    sep = ' '
+    names = ['e1', 'e2', 'rel']
+
+    valid = pd.read_csv(valid_fpath, sep=sep, skiprows=1, names=names)
+    test = pd.read_csv(test_fpath, sep=sep, skiprows=1, names=names)
+    valid_neg = pd.read_csv(valid_neg_fpath, sep=sep, skiprows=1, names=names)
+    test_neg = pd.read_csv(test_neg_fpath, sep=sep, skiprows=1, names=names)
+
+    flag = False
+    for pos, neg in [(valid, valid_neg), (test, test_neg)]:
+        for index, row in pos.iterrows():
+            if row.rel != neg.iloc[index].rel:
+                flag = True
+                raise Exception('There is NOT a one-to-one relation between positive and negative examples.')
+    if not flag:
+        print('There seems to be everything ok with the proportion of negative and positive examples.')
+    else:
+        print('There is NOT a one-to-one relation between positive and negative examples.')
