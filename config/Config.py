@@ -1,5 +1,5 @@
 #coding:utf-8
-import torch 
+import torch
 import torch.nn as nn
 import numpy as np
 from torch.autograd import Variable
@@ -32,7 +32,8 @@ class Config(object):
 		self.rel_size = self.hidden_size
 		self.train_times = 0
 		self.margin = 1.0
-		self.nbatches = 100
+		# self.nbatches = 100
+		self.batch_size = 500
 		self.negative_ent = 1
 		self.negative_rel = 0
 		self.workThreads = 1
@@ -61,7 +62,8 @@ class Config(object):
 			self.trainTotal = self.lib.getTrainTotal()
 			self.testTotal = self.lib.getTestTotal()
 			self.validTotal = self.lib.getValidTotal()
-			self.batch_size = self.lib.getTrainTotal() / self.nbatches
+			# self.batch_size = self.lib.getTrainTotal() / self.nbatches
+			self.nbatches = self.lib.getTrainTotal() / self.batch_size
 			self.batch_seq_size = self.batch_size * (1 + self.negative_ent + self.negative_rel)
 			self.batch_h = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
 			self.batch_t = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
@@ -158,37 +160,40 @@ class Config(object):
 
 	def set_train_times(self, times):
 		self.train_times = times
-	
-	def set_nbatches(self, nbatches):
-		self.nbatches = nbatches
-	
+
+	# def set_nbatches(self, nbatches):
+	# 	self.nbatches = nbatches
+
+	def set_batch_size(self, batch_size):
+		self.batch_size = batch_size
+
 	def set_margin(self, margin):
 		self.margin = margin
-	
+
 	def set_work_threads(self, threads):
 		self.workThreads = threads
-	
+
 	def set_ent_neg_rate(self, rate):
 		self.negative_ent = rate
-	
+
 	def set_rel_neg_rate(self, rate):
 		self.negative_rel = rate
-	
+
 	def set_import_files(self, path):
 		self.importName = path
-	
+
 	def set_export_files(self, path):
 		self.exportName = path
-	
+
 	def set_export_steps(self, steps):
 		self.export_steps = steps
-	
+
 	def set_lr_decay(self,lr_decay):
 		self.lr_decay=lr_decay
-	
+
 	def set_weight_decay(self,weight_decay):
 		self.weight_decay=weight_decay
-	
+
 	def sampling(self):
 		self.lib.sampling(self.batch_h_addr, self.batch_t_addr, self.batch_r_addr, self.batch_y_addr, self.batch_size, self.negative_ent, self.negative_rel)
 
