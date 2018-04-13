@@ -158,7 +158,7 @@ void importNegValidFiles() {
 extern "C"
 void getNegTest() {
     if (file_exists((inPath + "test2id_neg.txt").c_str())) {
-        importNegTestFiles(); // function defined in Reader.h
+        importNegTestFiles(); // function created above
     } else {
         negTestList = (Triple *)calloc(testTotal, sizeof(Triple));
         for (INT i = 0; i < testTotal; i++) {
@@ -179,7 +179,7 @@ void getNegTest() {
 extern "C"
 void getNegValid() {
     if (file_exists((inPath + "valid2id_neg.txt").c_str())) {
-        importNegValidFiles(); // function defined in Reader.h
+        importNegValidFiles(); // function created above
     } else {
         negValidList = (Triple *)calloc(validTotal, sizeof(Triple));
         for (INT i = 0; i < validTotal; i++) {
