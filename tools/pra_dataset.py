@@ -53,8 +53,38 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
                       index=False, header=False, sep='\t')
 
 
-def create_split():
-    """Creates a split directory that PRA algorithm can use for the respective dataset. Takes as
-    input three files: `train.txt`, `valid.txt` and `test.txt` .....
+## ideally, these files will be placed under the directory of a specific (trained) model,
+## to separate different predictions
+def create_split(datasets_dirpath, split_dirpath, folds=['train.tsv', 'valid.tsv', 'test.tsv'],
+                 extension='.tsv'):
+    """Creates a split directory that PRA algorithm can use for the respective dataset.
+
+    Arguments:
+    - datasets_dirpath: path to the dataset directory where all files should be in
+    - folds: a list of folds (data sets) (e.g., train.tsv, test.tsv, valid.tsv). Each fold should
+    be written in the following order: [head, relation, tail, label], tab-separated.
     """
-    pass
+    # read datasets into dfs
+    dfs = {}
+    for fold in folds:
+        fold_name = fold.replace(extension, '')
+        path = datasets_dirpath + fold
+        dfs[fold_name] = pd.read_csv(path, sep='\t', skiprows=0,
+                                     names=['head', 'relation', 'tail', 'label'])
+
+    # get relations
+    rels = set()
+    for _, df in dfs.iteritems():
+        rels.add(df['relation'].unique())
+
+    # create relations_to_run.tsv file
+    with open(split_dirpath + '/relations_to_run.tsv', 'w') as f:
+        for rel in rels:
+            f.write(rel + '\n')
+
+    # create each relation dir and its files
+    for rel in rels:
+        for fold_name, df in dfs.iteritems():
+            filtered = df.loc[df['relation'] == rel]
+            filtered.to_csv(split_dirpath + '/' + rel + '/' + fold_name + '.tsv',
+                            columns=['head', 'tail', 'label'], index=False, header=False, sep='\t')
