@@ -25,10 +25,8 @@ class TransD(Model):
 	def _calc(self,h,t,r):
 		if self.score_norm == 'l2':
 			a = h+r-t
-			print 'transD is using the l2 norm for score'
 			return torch.mul(a, a)
 		else:
-			print 'transD is using the l1 norm for score'
 			return torch.abs(h+r-t)
 	def loss_func(self,p_score,n_score):
 		criterion= nn.MarginRankingLoss(self.config.margin,False).cuda()
