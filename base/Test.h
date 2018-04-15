@@ -223,14 +223,20 @@ void getValidBatch(INT *ph, INT *pt, INT *pr, INT *nh, INT *nt, INT *nr) {
 
 REAL *relThresh;
 REAL threshEntire;
+REAL validAcc;
 extern "C"
 void getBestThreshold(REAL *score_pos, REAL *score_neg) {
     relThresh = (REAL *)calloc(relationTotal, sizeof(REAL));
     REAL interval, min_score, max_score, bestThresh, tmpThresh, bestAcc, tmpAcc;
     INT n_interval, correct, total;
+    INT total_all_relations, correct_all_relations, bestCorrect;
+    REAL valid_acc;
+    total_all_relations = 0;
+    correct_all_relations = 0;
     for (INT r = 0; r < relationTotal; r++) {
         if (validLef[r] == -1) continue;
         total = (validRig[r] - validLef[r] + 1) * 2;
+        total_all_relations += total;
         min_score = score_pos[validLef[r]];
         if (score_neg[validLef[r]] < min_score) min_score = score_neg[validLef[r]];
         max_score = score_pos[validLef[r]];
@@ -254,14 +260,19 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
             if (i == 0) {
                 bestThresh = tmpThresh;
                 bestAcc = tmpAcc;
+                bestCorrect = correct;
             } else if (tmpAcc > bestAcc) {
                 bestAcc = tmpAcc;
                 bestThresh = tmpThresh;
+                bestCorrect = correct;
             }
         }
         relThresh[r] = bestThresh;
         printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
+        correct_all_relations += bestCorrect;
     }
+    validAcc = 1.0 * correct_all_relations / total_all_relations;
+    printf("validation best accuracy is %lf\n", valid_acc);
 }
 
 REAL *testAcc;

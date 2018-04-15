@@ -9,6 +9,7 @@ import time
 import datetime
 import ctypes
 import json
+from ctypes import c_float # needed to extract the average accuracy value
 
 class Config(object):
 
@@ -263,28 +264,34 @@ class Config(object):
 		else:
 			self.optimizer = optim.SGD(self.trainModel.parameters(), lr=self.alpha)
 
+
 	def run(self):
+		self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
 		if self.importName != None:
 			self.restore_pytorch()
-                self.learning_log = []
-		for epoch in range(self.train_times):
+		self.learning_log = []
+		for epoch in range(1, self.train_times + 1):
 			res = 0.0
-			for batch in range(self.nbatches):
+			for batch in range(1, self.nbatches + 1):
 				self.sampling()
 				self.optimizer.zero_grad()
 				loss = self.trainModel()
-				res = res + loss.data[0]
 				loss.backward()
 				self.optimizer.step()
+				res = res + loss.data[0]
+			# printing and logging info
+			if self.log_on == 1:
+				valid_acc = self.validation_acc()
+				print "Epoch: {:4d},\tLoss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, res, valid_acc)
+				self.learning_log.append((epoch, res, valid_acc))
 			if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
 				self.save_pytorch()
-			if self.log_on == 1:
-				print "Epoch: {}, Loss: {}".format(epoch, res)
-                                self.learning_log.append((epoch, res))
 		if self.exportName != None:
 			self.save_pytorch()
 		if self.out_path != None:
 			self.save_parameters(self.out_path)
+
+
 
 	def test(self):
 		if self.importName != None:
@@ -303,11 +310,10 @@ class Config(object):
 					print epoch
 			self.lib.test_link_prediction()
 		if self.test_triple_classification:
-			self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
 			res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
 			res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
-			print "res_pos",res_pos
-			print "res_neg",res_neg
+			# print "res_pos",res_pos
+			# print "res_neg",res_neg
 			self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
 
 			self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)
@@ -315,3 +321,13 @@ class Config(object):
 			res_pos = self.trainModel.predict(self.test_pos_h, self.test_pos_t, self.test_pos_r)
 			res_neg = self.trainModel.predict(self.test_neg_h, self.test_neg_t, self.test_neg_r)
 			self.lib.test_triple_classification(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
+
+
+	def validation_acc(self):
+		"""Returns the validation set accuracy for the best threshold.
+		"""
+		res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
+		res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
+		self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
+		valid_acc = c_float.in_dll(self.lib, 'validAcc').value
+		return valid_acc
