@@ -41,6 +41,8 @@ class Config(object):
 		self.alpha = 0.001
 		self.lmbda = 0.000
 		self.log_on = 1
+		self.log_type = 'epoch'
+		self.log_print = True
 		self.lr_decay=0.000
 		self.weight_decay=0.000
 		self.exportName = None
@@ -133,8 +135,10 @@ class Config(object):
 	def set_test_triple_classification(self, flag):
 		self.test_triple_classification = flag
 
-	def set_log_on(self, flag):
+	def set_log_on(self, flag, log_type='epoch', log_print=True):
 		self.log_on = flag
+		self.log_type = log_type
+		self.log_print = log_print
 
 	def set_alpha(self, alpha):
 		self.alpha = alpha
@@ -271,19 +275,33 @@ class Config(object):
 			self.restore_pytorch()
 		self.learning_log = []
 		for epoch in range(1, self.train_times + 1):
-			res = 0.0
+			epoch_loss = 0.0
 			for batch in range(1, self.nbatches + 1):
 				self.sampling()
 				self.optimizer.zero_grad()
 				loss = self.trainModel()
 				loss.backward()
 				self.optimizer.step()
-				res = res + loss.data[0]
+				batch_loss = loss.data[0]
+				epoch_loss += batch_loss
+				# logging
+				if self.log_on and self.log_type == 'batch':
+					valid_acc = self.validation_acc()
+					self.learning_log.append({'epoch': epoch,
+											  'batch': batch,
+											  'epoch_loss': epoch_loss,
+											  'batch_loss': batch_loss,
+											  'valid_acc': valid_acc})
+					if self.log_print:
+						print "Epoch: {:4d},\tBatch: {:3d},\tEpoch Loss: {:9.3f},\tBatch Loss: {:7.3f}\tValid Acc: {:0.3f}".format(epoch, batch, epoch_loss, batch_loss, valid_acc)
 			# printing and logging info
-			if self.log_on == 1:
+			if self.log_on == 1 and self.log_type == 'epoch':
 				valid_acc = self.validation_acc()
-				print "Epoch: {:4d},\tLoss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, res, valid_acc)
-				self.learning_log.append((epoch, res, valid_acc))
+				self.learning_log.append({'epoch': epoch,
+			  						  	  'epoch_loss': epoch_loss,
+									  	  'valid_acc': valid_acc})
+				if self.log_print:
+  			  		print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, epoch_loss, valid_acc)
 			if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
 				self.save_pytorch()
 		if self.exportName != None:
