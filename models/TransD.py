@@ -6,13 +6,15 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class TransD(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(TransD,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(self.config.entTotal,self.config.hidden_size)
 		self.rel_embeddings=nn.Embedding(self.config.relTotal,self.config.hidden_size)
 		self.ent_transfer=nn.Embedding(self.config.entTotal,self.config.hidden_size)
 		self.rel_transfer=nn.Embedding(self.config.relTotal,self.config.hidden_size)
 		self.init_weights()
+		if 'score_norm' in kwargs:
+			self.score_norm = kwargs['score_norm']
 	def init_weights(self):
 		nn.init.xavier_uniform(self.ent_embeddings.weight.data)
 		nn.init.xavier_uniform(self.rel_embeddings.weight.data)
@@ -21,7 +23,13 @@ class TransD(Model):
 	def _transfer(self,e,t,r):
 		return e+torch.sum(e*t,1,True)*r
 	def _calc(self,h,t,r):
-		return torch.abs(h+r-t)
+		if self.score_norm == 'l2':
+			a = h+r-t
+			print 'transD is using the l2 norm for score'
+			return torch.mul(a, a)
+		else:
+			print 'transD is using the l1 norm for score'
+			return torch.abs(h+r-t)
 	def loss_func(self,p_score,n_score):
 		criterion= nn.MarginRankingLoss(self.config.margin,False).cuda()
 		y=Variable(torch.Tensor([-1])).cuda()
@@ -67,6 +75,3 @@ class TransD(Model):
 		_p_score = self._calc(p_h, p_t, p_r)
 		p_score=torch.sum(_p_score,1)
 		return p_score.cpu()
-		
-
-			

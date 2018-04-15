@@ -249,9 +249,9 @@ class Config(object):
 		for i in lists:
 			self.set_parameters_by_name(i, lists[i])
 
-	def set_model(self, model):
+	def set_model(self, model, **kwargs):
 		self.model = model
-		self.trainModel = self.model(config = self)
+		self.trainModel = self.model(config=self, **kwargs)
 		self.trainModel.cuda()
 		if self.optimizer != None:
 			pass
