@@ -33,8 +33,8 @@ class Config(object):
 		self.rel_size = self.hidden_size
 		self.train_times = 0
 		self.margin = 1.0
-		# self.nbatches = 100
-		self.batch_size = 500
+		self.nbatches = 100
+		self.batch_size = None
 		self.negative_ent = 1
 		self.negative_rel = 0
 		self.workThreads = 1
@@ -65,8 +65,10 @@ class Config(object):
 			self.trainTotal = self.lib.getTrainTotal()
 			self.testTotal = self.lib.getTestTotal()
 			self.validTotal = self.lib.getValidTotal()
-			# self.batch_size = self.lib.getTrainTotal() / self.nbatches
-			self.nbatches = self.lib.getTrainTotal() / self.batch_size
+			if self.batch_size == None:
+				self.batch_size = self.lib.getTrainTotal() / self.nbatches
+			else:
+				self.nbatches = self.lib.getTrainTotal() / self.batch_size
 			self.batch_seq_size = self.batch_size * (1 + self.negative_ent + self.negative_rel)
 			self.batch_h = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
 			self.batch_t = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
@@ -166,11 +168,13 @@ class Config(object):
 	def set_train_times(self, times):
 		self.train_times = times
 
-	# def set_nbatches(self, nbatches):
-	# 	self.nbatches = nbatches
+	def set_nbatches(self, nbatches):
+		self.nbatches = nbatches
+		self.batch_size = None
 
 	def set_batch_size(self, batch_size):
 		self.batch_size = batch_size
+		self.nbatches = None
 
 	def set_margin(self, margin):
 		self.margin = margin
