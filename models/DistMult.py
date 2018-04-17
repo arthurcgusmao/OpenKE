@@ -6,7 +6,7 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class DistMult(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(DistMult,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(self.config.entTotal,self.config.hidden_size)
 		self.rel_embeddings=nn.Embedding(self.config.relTotal,self.config.hidden_size)
@@ -39,4 +39,3 @@ class DistMult(Model):
 		p_e_r=self.rel_embeddings(Variable(torch.from_numpy(predict_r)).cuda())
 		p_score=-self._calc(p_e_h,p_e_t,p_e_r)
 		return p_score.cpu()
-		

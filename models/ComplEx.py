@@ -6,7 +6,7 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class ComplEx(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(ComplEx,self).__init__(config)
 		self.ent_re_embeddings=nn.Embedding(self.config.entTotal,self.config.hidden_size)
 		self.ent_im_embeddings=nn.Embedding(self.config.entTotal,self.config.hidden_size)
@@ -49,10 +49,3 @@ class ComplEx(Model):
 		p_im_r=self.rel_im_embeddings(Variable(torch.from_numpy(predict_r)).cuda())
 		p_score = -self._calc(p_re_h, p_im_h, p_re_t, p_im_t, p_re_r, p_im_r)
 		return p_score.cpu()
-
-
-
-	
-	
-	
-		

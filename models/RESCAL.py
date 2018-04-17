@@ -6,7 +6,7 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class RESCAL(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(RESCAL,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(self.config.entTotal,self.config.hidden_size)
 		self.rel_matrices=nn.Embedding(self.config.relTotal,self.config.hidden_size*self.config.hidden_size)
@@ -42,4 +42,3 @@ class RESCAL(Model):
 		p_r_e=self.rel_matrices(Variable(torch.from_numpy(predict_r)).cuda()).view(-1,self.config.hidden_size,self.config.hidden_size)
 		p_score=-torch.sum(self._calc(p_h_e, p_t_e, p_r_e),1)
 		return p_score.cpu()
-		
