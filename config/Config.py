@@ -52,6 +52,7 @@ class Config(object):
 		self.optimizer = None
 		self.test_link_prediction = False
 		self.test_triple_classification = False
+        self.log = {} # logging dict where we'll save information about training/testing
 	def init(self):
 		self.trainModel = None
 		if self.in_path != None:
@@ -277,7 +278,8 @@ class Config(object):
 		self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
 		if self.importName != None:
 			self.restore_pytorch()
-		self.learning_log = []
+		self.log['training_curve'] = []
+        start_time = time.time()
 		for epoch in range(1, self.train_times + 1):
 			epoch_loss = 0.0
 			for batch in range(1, self.nbatches + 1):
@@ -291,7 +293,7 @@ class Config(object):
 				# logging
 				if self.log_on and self.log_type == 'batch':
 					valid_acc = self.validation_acc()
-					self.learning_log.append({'epoch': epoch,
+					self.log['training_curve'].append({'epoch': epoch,
 											  'batch': batch,
 											  'epoch_loss': epoch_loss,
 											  'batch_loss': batch_loss,
@@ -301,13 +303,14 @@ class Config(object):
 			# printing and logging info
 			if self.log_on == 1 and self.log_type == 'epoch':
 				valid_acc = self.validation_acc()
-				self.learning_log.append({'epoch': epoch,
+				self.log['training_curve'].append({'epoch': epoch,
 			  						  	  'epoch_loss': epoch_loss,
 									  	  'valid_acc': valid_acc})
 				if self.log_print:
   			  		print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, epoch_loss, valid_acc)
 			if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
 				self.save_pytorch()
+        self.log['learning_time'] = time.time() - start_time
 		if self.exportName != None:
 			self.save_pytorch()
 		if self.out_path != None:
