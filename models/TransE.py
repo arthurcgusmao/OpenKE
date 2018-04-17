@@ -10,18 +10,24 @@ from torch.autograd import Variable
 
 class TransE(Model):
 
-	def __init__(self, config):
+	def __init__(self, config, **kwargs):
 		super(TransE,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(config.entTotal,config.hidden_size)
 		self.rel_embeddings=nn.Embedding(config.relTotal,config.hidden_size)
 		self.init_weights()
+		if 'score_norm' in kwargs:
+			self.score_norm = kwargs['score_norm']
 
 	def init_weights(self):
 		nn.init.xavier_uniform(self.ent_embeddings.weight.data)
 		nn.init.xavier_uniform(self.rel_embeddings.weight.data)
-		
+
 	def _calc(self,h,t,r):
-		return torch.abs(h + r - t)
+		if self.score_norm == 'l2':
+			a = h+r-t
+			return torch.mul(a, a)
+		else:
+			return torch.abs(h+r-t)
 
 	def loss_func(self,p_score,n_score):
 		criterion = nn.MarginRankingLoss(self.config.margin, False).cuda()
@@ -52,5 +58,3 @@ class TransE(Model):
 		_p_score = self._calc(p_h, p_t, p_r)
 		p_score=torch.sum(_p_score,1)
 		return p_score.cpu()
-
-

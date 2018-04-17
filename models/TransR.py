@@ -6,12 +6,14 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class TransR(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(TransR,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(self.config.entTotal,self.config.ent_size)
 		self.rel_embeddings=nn.Embedding(self.config.relTotal,self.config.rel_size)
 		self.transfer_matrix=nn.Embedding(self.config.relTotal,self.config.ent_size*self.config.rel_size)
 		self.init_weights()
+		if 'score_norm' in kwargs:
+			self.score_norm = kwargs['score_norm']
 	def init_weights(self):
 		nn.init.xavier_uniform(self.ent_embeddings.weight.data)
 		nn.init.xavier_uniform(self.rel_embeddings.weight.data)
@@ -19,7 +21,11 @@ class TransR(Model):
 	def _transfer(self,transfer_matrix,embeddings):
 		return torch.matmul(transfer_matrix,embeddings)
 	def _calc(self,h,t,r):
-		return torch.abs(h+r-t)
+		if self.score_norm == 'l2':
+			a = h+r-t
+			return torch.mul(a, a)
+		else:
+			return torch.abs(h+r-t)
 	def loss_func(self,p_score,n_score):
 		criterion= nn.MarginRankingLoss(self.config.margin,False).cuda()
 		y=Variable(torch.Tensor([-1])).cuda()
@@ -38,7 +44,7 @@ class TransR(Model):
 		n_matrix=self.transfer_matrix(neg_r).view(-1,self.config.rel_size,self.config.ent_size)
 		p_h=self._transfer(p_matrix,p_h_e).view(-1,self.config.rel_size)
 		p_t=self._transfer(p_matrix,p_t_e).view(-1,self.config.rel_size)
-		p_r=p_r_e				
+		p_r=p_r_e
 		n_h=self._transfer(n_matrix,n_h_e).view(-1,self.config.rel_size)
 		n_t=self._transfer(n_matrix,n_t_e).view(-1,self.config.rel_size)
 		n_r=n_r_e
@@ -55,8 +61,7 @@ class TransR(Model):
 		p_matrix=self.transfer_matrix(Variable(torch.from_numpy(predict_r)).cuda()).view(-1,self.config.rel_size,self.config.ent_size)
 		p_h=self._transfer(p_matrix,p_h_e).view(-1,self.config.rel_size)
 		p_t=self._transfer(p_matrix,p_t_e).view(-1,self.config.rel_size)
-		p_r=p_r_e				
+		p_r=p_r_e
 		_p_score = self._calc(p_h, p_t, p_r)
 		p_score=torch.sum(_p_score,1)
 		return p_score.cpu()
-		

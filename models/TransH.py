@@ -6,12 +6,14 @@ import torch.optim as optim
 import numpy as np
 from Model import *
 class TransH(Model):
-	def __init__(self,config):
+	def __init__(self,config,**kwargs):
 		super(TransH,self).__init__(config)
 		self.ent_embeddings=nn.Embedding(config.entTotal,config.hidden_size)
 		self.rel_embeddings=nn.Embedding(config.relTotal,config.hidden_size)
 		self.norm_vector=nn.Embedding(config.relTotal,config.hidden_size)
 		self.init_weights()
+		if 'score_norm' in kwargs:
+			self.score_norm = kwargs['score_norm']
 	def init_weights(self):
 		nn.init.xavier_uniform(self.ent_embeddings.weight.data)
 		nn.init.xavier_uniform(self.rel_embeddings.weight.data)
@@ -19,7 +21,11 @@ class TransH(Model):
 	def _transfer(self,e,norm):
 		return e - torch.sum(e * norm, 1, True) * norm
 	def _calc(self,h,t,r):
-		return torch.abs(h+r-t)
+		if self.score_norm == 'l2':
+			a = h+r-t
+			return torch.mul(a, a)
+		else:
+			return torch.abs(h+r-t)
 	def loss_func(self,p_score,n_score):
 		criterion= nn.MarginRankingLoss(self.config.margin,False).cuda()
 		y=Variable(torch.Tensor([-1])).cuda()
@@ -62,5 +68,3 @@ class TransH(Model):
 		_p_score=self._calc(p_h, p_t, p_r)
 		p_score=torch.sum(_p_score,1)
 		return p_score.cpu()
-
-		
