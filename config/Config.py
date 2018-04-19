@@ -1,15 +1,12 @@
 #coding:utf-8
-import torch
-import torch.nn as nn
 import numpy as np
-from torch.autograd import Variable
-import torch.optim as optim
+import tensorflow as tf
 import os
 import time
 import datetime
 import ctypes
-import json
 from ctypes import c_float # needed to extract the average accuracy value
+import json
 
 class Config(object):
 
@@ -207,41 +204,52 @@ class Config(object):
     def sampling(self):
         self.lib.sampling(self.batch_h_addr, self.batch_t_addr, self.batch_r_addr, self.batch_y_addr, self.batch_size, self.negative_ent, self.negative_rel)
 
-    def save_pytorch(self):
-        torch.save(self.trainModel.state_dict(), self.exportName)
+    def save_tensorflow(self):
+        with self.graph.as_default():
+            with self.sess.as_default():
+                self.saver.save(self.sess, self.exportName)
 
-    def restore_pytorch(self):
-        self.trainModel.load_state_dict(torch.load(self.importName))
-        #self.trainModel.cuda()
+    def restore_tensorflow(self):
+        with self.graph.as_default():
+            with self.sess.as_default():
+                self.saver.restore(self.sess, self.importName)
+
 
     def export_variables(self, path = None):
-        if path == None:
-            torch.save(self.trainModel.state_dict(), self.exportName)
-        else:
-            torch.save(self.trainModel.state_dict(), path)
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if path == None:
+                    self.saver.save(self.sess, self.exportName)
+                else:
+                    self.saver.save(self.sess, path)
 
     def import_variables(self, path = None):
-        if path == None:
-            self.trainModel.load_state_dict(torch.load(self.importName))
-        else:
-            self.trainModel.load_state_dict(torch.load(path))
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if path == None:
+                    self.saver.restore(self.sess, self.importName)
+                else:
+                    self.saver.restore(self.sess, path)
 
     def get_parameter_lists(self):
-        return self.trainModel.cpu().state_dict()
+        return self.trainModel.parameter_lists
 
     def get_parameters_by_name(self, var_name):
-        return self.trainModel.cpu().state_dict().get(var_name)
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if var_name in self.trainModel.parameter_lists:
+                    return self.sess.run(self.trainModel.parameter_lists[var_name])
+                else:
+                    return None
 
     def get_parameters(self, mode = "numpy"):
         res = {}
         lists = self.get_parameter_lists()
         for var_name in lists:
             if mode == "numpy":
-                res[var_name] = lists[var_name].numpy()
-            if mode == "list":
-                res[var_name] = lists[var_name].numpy().tolist()
+                res[var_name] = self.get_parameters_by_name(var_name)
             else:
-                res[var_name] = lists[var_name]
+                res[var_name] = self.get_parameters_by_name(var_name).tolist()
         return res
 
     def save_parameters(self, path = None):
@@ -252,7 +260,10 @@ class Config(object):
         f.close()
 
     def set_parameters_by_name(self, var_name, tensor):
-        self.trainModel.state_dict().get(var_name).copy_(torch.from_numpy(np.array(tensor)))
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if var_name in self.trainModel.parameter_lists:
+                    self.trainModel.parameter_lists[var_name].assign(tensor).eval()
 
     def set_parameters(self, lists):
         for i in lists:
@@ -260,96 +271,123 @@ class Config(object):
 
     def set_model(self, model, **kwargs):
         self.model = model
-        self.trainModel = self.model(config=self, **kwargs)
-        self.trainModel.cuda()
-        if self.optimizer != None:
-            pass
-        elif self.opt_method == "Adagrad" or self.opt_method == "adagrad":
-            self.optimizer = optim.Adagrad(self.trainModel.parameters(), lr=self.alpha,lr_decay=self.lr_decay,weight_decay=self.weight_decay)
-        elif self.opt_method == "Adadelta" or self.opt_method == "adadelta":
-            self.optimizer = optim.Adadelta(self.trainModel.parameters(), lr=self.alpha)
-        elif self.opt_method == "Adam" or self.opt_method == "adam":
-            self.optimizer = optim.Adam(self.trainModel.parameters(), lr=self.alpha)
-        else:
-            self.optimizer = optim.SGD(self.trainModel.parameters(), lr=self.alpha)
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            self.sess = tf.Session()
+            with self.sess.as_default():
+                initializer = tf.contrib.layers.xavier_initializer(uniform = True)
+                with tf.variable_scope("model", reuse=None, initializer = initializer):
+                    self.trainModel = self.model(config = self)
+                    if self.optimizer != None:
+                        pass
+                    elif self.opt_method == "Adagrad" or self.opt_method == "adagrad":
+                        self.optimizer = tf.train.AdagradOptimizer(learning_rate = self.alpha, initial_accumulator_value=1e-20)
+                    elif self.opt_method == "Adadelta" or self.opt_method == "adadelta":
+                        self.optimizer = tf.train.AdadeltaOptimizer(self.alpha)
+                    elif self.opt_method == "Adam" or self.opt_method == "adam":
+                        self.optimizer = tf.train.AdamOptimizer(self.alpha)
+                    else:
+                        self.optimizer = tf.train.GradientDescentOptimizer(self.alpha)
+                    grads_and_vars = self.optimizer.compute_gradients(self.trainModel.loss)
+                    self.train_op = self.optimizer.apply_gradients(grads_and_vars)
+                self.saver = tf.train.Saver()
+                self.sess.run(tf.initialize_all_variables())
 
+    def train_step(self, batch_h, batch_t, batch_r, batch_y):
+        feed_dict = {
+            self.trainModel.batch_h: batch_h,
+            self.trainModel.batch_t: batch_t,
+            self.trainModel.batch_r: batch_r,
+            self.trainModel.batch_y: batch_y
+        }
+        _, loss = self.sess.run([self.train_op, self.trainModel.loss], feed_dict)
+        return loss
+
+    def test_step(self, test_h, test_t, test_r):
+        feed_dict = {
+            self.trainModel.predict_h: test_h,
+            self.trainModel.predict_t: test_t,
+            self.trainModel.predict_r: test_r,
+        }
+        predict = self.sess.run(self.trainModel.predict, feed_dict)
+        return predict
 
     def run(self):
-        if self.importName != None:
-            self.restore_pytorch()
-        self.log['training_curve'] = []
-        start_time = time.time()
-        for epoch in range(1, self.train_times + 1):
-            epoch_loss = 0.0
-            for batch in range(1, self.nbatches + 1):
-                self.sampling()
-                self.optimizer.zero_grad()
-                loss = self.trainModel()
-                loss.backward()
-                self.optimizer.step()
-                batch_loss = loss.data[0]
-                epoch_loss += batch_loss
-                # logging
-                if self.log_on and self.log_type == 'batch':
-                    valid_acc = self.validation_acc()
-                    self.log['training_curve'].append({'epoch': epoch,
-                                              'batch': batch,
-                                              'epoch_loss': epoch_loss,
-                                              'batch_loss': batch_loss,
-                                              'valid_acc': valid_acc})
-                    if self.log_print:
-                        print "Epoch: {:4d},\tBatch: {:3d},\tEpoch Loss: {:9.3f},\tBatch Loss: {:7.3f}\tValid Acc: {:0.3f}".format(epoch, batch, epoch_loss, batch_loss, valid_acc)
-            # printing and logging info
-            if self.log_on == 1 and self.log_type == 'epoch':
-                valid_acc = self.validation_acc()
-                self.log['training_curve'].append({'epoch': epoch,
-                                          'epoch_loss': epoch_loss,
-                                          'valid_acc': valid_acc})
-                if self.log_print:
-                    print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, epoch_loss, valid_acc)
-            if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
-                self.save_pytorch()
-        self.log['learning_time'] = time.time() - start_time
-        if self.exportName != None:
-            self.save_pytorch()
-        if self.out_path != None:
-            self.save_parameters(self.out_path)
-
-
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if self.importName != None:
+                    self.restore_tensorflow()
+                self.log['training_curve'] = []
+                start_time = time.time()
+                for epoch in range(self.train_times):
+                    epoch_loss = 0.0
+                    for batch in range(self.nbatches):
+                        self.sampling()
+                        batch_loss = self.train_step(self.batch_h, self.batch_t, self.batch_r, self.batch_y)
+                        epoch_loss += batch_loss
+                        # logging
+                        if self.log_on and self.log_type == 'batch':
+                            valid_acc = self.validation_acc()
+                            self.log['training_curve'].append({'epoch': epoch,
+                                                               'batch': batch,
+                                                               'epoch_loss': epoch_loss,
+                                                               'batch_loss': batch_loss,
+                                                               'valid_acc': valid_acc})
+                            if self.log_print:
+                                print "Epoch: {:4d},\tBatch: {:3d},\tEpoch Loss: {:9.3f},\tBatch Loss: {:7.3f}\tValid Acc: {:0.3f}".format(epoch, batch, epoch_loss, batch_loss, valid_acc)
+                    # printing and logging info
+                    if self.log_on == 1 and self.log_type == 'epoch':
+                        valid_acc = self.validation_acc()
+                        self.log['training_curve'].append({'epoch': epoch,
+                                                           'epoch_loss': epoch_loss,
+                                                           'valid_acc': valid_acc})
+                        if self.log_print:
+                            print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, epoch_loss, valid_acc)
+                    if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
+                        self.save_tensorflow()
+                self.log['learning_time'] = time.time() - start_time
+                if self.exportName != None:
+                    self.save_tensorflow()
+                if self.out_path != None:
+                    self.save_parameters(self.out_path)
 
     def test(self):
-        if self.importName != None:
-            self.restore_pytorch()
-        if self.test_link_prediction:
-            total = self.lib.getTestTotal()
-            for epoch in range(total):
-                self.lib.getHeadBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
-                res = self.trainModel.predict(self.test_h, self.test_t, self.test_r)
-                self.lib.testHead(res.data.numpy().__array_interface__['data'][0])
+        with self.graph.as_default():
+            with self.sess.as_default():
+                if self.importName != None:
+                    self.restore_tensorflow()
+                if self.test_link_prediction:
+                    total = self.lib.getTestTotal()
+                    for times in range(total):
+                        self.lib.getHeadBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
+                        res = self.test_step(self.test_h, self.test_t, self.test_r)
+                        self.lib.testHead(res.__array_interface__['data'][0])
 
-                self.lib.getTailBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
-                res = self.trainModel.predict(self.test_h, self.test_t, self.test_r)
-                self.lib.testTail(res.data.numpy().__array_interface__['data'][0])
-                if self.log_on:
-                    print epoch
-            self.lib.test_link_prediction()
-        if self.test_triple_classification:
-            self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
-            res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
-            res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
-            self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
-            self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)
-            res_pos = self.trainModel.predict(self.test_pos_h, self.test_pos_t, self.test_pos_r)
-            res_neg = self.trainModel.predict(self.test_neg_h, self.test_neg_t, self.test_neg_r)
-            self.lib.test_triple_classification(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
+                        self.lib.getTailBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
+                        res = self.test_step(self.test_h, self.test_t, self.test_r)
+                        self.lib.testTail(res.__array_interface__['data'][0])
+                        if self.log_on:
+                            print times
+                    self.lib.test_link_prediction()
+                if self.test_triple_classification:
+                    self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
+                    res_pos = self.test_step(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
+                    res_neg = self.test_step(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
+                    self.lib.getBestThreshold(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
+
+                    self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)
+
+                    res_pos = self.test_step(self.test_pos_h, self.test_pos_t, self.test_pos_r)
+                    res_neg = self.test_step(self.test_neg_h, self.test_neg_t, self.test_neg_r)
+                    self.lib.test_triple_classification(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
 
 
     def validation_acc(self):
         """Returns the validation set accuracy for the best threshold.
         """
         self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
-        res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
-        res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
+        res_pos = self.test_step(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
+        res_neg = self.test_step(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
         self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
         valid_acc = c_float.in_dll(self.lib, 'validAcc').value
         return valid_acc

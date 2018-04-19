@@ -14,6 +14,7 @@ con.set_train_times(500)
 con.set_nbatches(100)
 con.set_alpha(0.1)
 con.set_bern(0)
+con.set_margin(0.2)
 con.set_dimension(100)
 con.set_ent_neg_rate(1)
 con.set_rel_neg_rate(0)
@@ -26,7 +27,7 @@ con.set_out_files("./res/embedding.vec.json")
 #Initialize experimental settings.
 con.init()
 #Set the knowledge embedding model
-con.set_model(models.DistMult)
+con.set_model(models.HolE)
 #Train the model.
 con.run()
 #To test models after training needs "set_test_flag(True)".
