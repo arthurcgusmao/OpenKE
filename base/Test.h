@@ -275,6 +275,12 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
     printf("validation best accuracy is %lf\n", valid_acc);
 }
 
+REAL threshold_for_relation;
+extern "C"
+void update_threshold_for_relation(INT r) {
+    threshold_for_relation = relThresh[r];
+}
+
 REAL *testAcc;
 REAL aveAcc;
 extern "C"

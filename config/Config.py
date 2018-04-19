@@ -275,7 +275,6 @@ class Config(object):
 
 
     def run(self):
-        self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
         if self.importName != None:
             self.restore_pytorch()
         self.log['training_curve'] = []
@@ -335,6 +334,7 @@ class Config(object):
                     print epoch
             self.lib.test_link_prediction()
         if self.test_triple_classification:
+            self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
             res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
             res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
             self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
@@ -347,8 +347,48 @@ class Config(object):
     def validation_acc(self):
         """Returns the validation set accuracy for the best threshold.
         """
+        self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
         res_pos = self.trainModel.predict(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
         res_neg = self.trainModel.predict(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
         self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
         valid_acc = c_float.in_dll(self.lib, 'validAcc').value
         return valid_acc
+
+
+
+
+
+
+    def get_threshold_for_relation(self, r):
+        """Returns the optimal threshold (found using the validation set) for a specific relation.
+        """
+        self.lib.update_threshold_for_relation(r)
+        return c_float.in_dll(self.lib, 'threshold_for_relation').value
+
+
+    def get_threshold_dict_for_relations(self, rels):
+        """Returns a dict whose keys are relation indexes and values are the respective threshold.
+
+        Arguments:
+        - rels: a numpy array of relations.
+        """
+        unique_rels = np.unique(rels)
+        thres_dict = {}
+        for r in unique_rels:
+            thres_dict[r] = self.get_threshold_for_relation(r)
+        return thres_dict
+
+
+    # def classify(self, heads, tails, rels):
+    #     """Returns the classification of a set of triples, using the validation threshold. """
+    #     #
+    #     thres_dict = self.get_threshold_dict_for_relations(rels)
+    #
+    #     scores = self.trainModel.predict(heads, tails, rels)
+    #     classes = np.zeros(len(scores))
+    #
+    #     _classify = lambda x:
+    #     _classify = np.vectorize(lambda x: 1 if )
+    #
+    #     for i in len(scores):
+    #         classes[i] =
