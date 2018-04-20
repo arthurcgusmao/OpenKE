@@ -388,7 +388,7 @@ class Config(object):
         self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
         res_pos = self.test_step(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
         res_neg = self.test_step(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
-        self.lib.getBestThreshold(res_pos.data.numpy().__array_interface__['data'][0], res_neg.data.numpy().__array_interface__['data'][0])
+        self.lib.getBestThreshold(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
         valid_acc = c_float.in_dll(self.lib, 'validAcc').value
         return valid_acc
 
