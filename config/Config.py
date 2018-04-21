@@ -207,7 +207,7 @@ class Config(object):
     def save_tensorflow(self):
         with self.graph.as_default():
             with self.sess.as_default():
-                self.saver.save(self.sess, self.exportName)
+                print self.saver.save(self.sess, self.exportName)
 
     def restore_tensorflow(self):
         with self.graph.as_default():
@@ -370,32 +370,25 @@ class Config(object):
                             print times
                     self.lib.test_link_prediction()
                 if self.test_triple_classification:
-                    self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
-                    res_pos = self.test_step(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
-                    res_neg = self.test_step(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
-                    self.lib.getBestThreshold(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
-
+                    self.calculate_thresholds()
                     self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)
-
                     res_pos = self.test_step(self.test_pos_h, self.test_pos_t, self.test_pos_r)
                     res_neg = self.test_step(self.test_neg_h, self.test_neg_t, self.test_neg_r)
                     self.lib.test_triple_classification(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
 
 
-    def validation_acc(self):
-        """Returns the validation set accuracy for the best threshold.
-        """
+    def calculate_thresholds(self):
         self.lib.getValidBatch(self.valid_pos_h_addr, self.valid_pos_t_addr, self.valid_pos_r_addr, self.valid_neg_h_addr, self.valid_neg_t_addr, self.valid_neg_r_addr)
         res_pos = self.test_step(self.valid_pos_h, self.valid_pos_t, self.valid_pos_r)
         res_neg = self.test_step(self.valid_neg_h, self.valid_neg_t, self.valid_neg_r)
         self.lib.getBestThreshold(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
+
+    def validation_acc(self):
+        """Returns the validation set accuracy for the best threshold.
+        """
+        self.calculate_thresholds()
         valid_acc = c_float.in_dll(self.lib, 'validAcc').value
         return valid_acc
-
-
-
-
-
 
     def get_threshold_for_relation(self, r):
         """Returns the optimal threshold (found using the validation set) for a specific relation.
@@ -403,30 +396,57 @@ class Config(object):
         self.lib.update_threshold_for_relation(r)
         return c_float.in_dll(self.lib, 'threshold_for_relation').value
 
+    # def get_threshold_dict_for_relations(self, rels):
+    #     """Returns a dict whose keys are relation indexes and values are the respective threshold.
+    #
+    #     Arguments:
+    #     - rels: a numpy array of relations.
+    #     """
+    #     self.calculate_thresholds()
+    #     unique_rels = np.unique(rels)
+    #     thres_dict = {}
+    #     for r in unique_rels:
+    #         thres_dict[r] = self.get_threshold_for_relation(r)
+    #     return thres_dict
 
-    def get_threshold_dict_for_relations(self, rels):
+    def get_threshold_list_for_relations(self, rels):
         """Returns a dict whose keys are relation indexes and values are the respective threshold.
 
         Arguments:
         - rels: a numpy array of relations.
         """
+        self.calculate_thresholds()
         unique_rels = np.unique(rels)
-        thres_dict = {}
+        thres_list = []
         for r in unique_rels:
-            thres_dict[r] = self.get_threshold_for_relation(r)
-        return thres_dict
+            thres_list.append(self.get_threshold_for_relation(r))
+        return thres_list
 
 
-    # def classify(self, heads, tails, rels):
-    #     """Returns the classification of a set of triples, using the validation threshold. """
-    #     #
-    #     thres_dict = self.get_threshold_dict_for_relations(rels)
-    #
-    #     scores = self.trainModel.predict(heads, tails, rels)
-    #     classes = np.zeros(len(scores))
-    #
-    #     _classify = lambda x:
-    #     _classify = np.vectorize(lambda x: 1 if )
-    #
-    #     for i in len(scores):
-    #         classes[i] =
+    def classify(self, heads, tails, rels, batch_size=10000):
+        """Returns the classification of a set of triples, using the validation threshold."""
+        thres_list = self.get_threshold_list_for_relations(rels)
+        thres_params = tf.constant(thres_list)
+
+        scores = tf.placeholder(tf.float32, [None])
+        relations = tf.placeholder(tf.int64, [None])
+        thresholds = tf.gather(thres_params, relations)
+        classes = tf.less(scores, thresholds)
+
+        if len(rels) % batch_size == 0:
+            total_iters = len(rels) / batch_size
+        else:
+            total_iters = (len(rels) / batch_size) + 1
+
+        output = np.array([])
+        with tf.Session() as sess:
+            for i in range(total_iters):
+                print("Classifying iteration {} of {}".format(i, total_iters))
+                start = (i) * batch_size
+                end = (i+1) * batch_size
+                res = tf.Session().run(classes, feed_dict={
+                    scores: self.test_step(heads[start:end], tails[start:end], rels[start:end]).reshape(-1),
+                    relations: rels[start:end]
+                })
+                output = np.concatenate((output, res))
+        return output
