@@ -1,0 +1,10 @@
+{
+  "name":"FB15k-237",
+  "relation sets":[{
+    "is kb":false,
+    "relation file":"/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/FB15k-237/pra_graph_input/train.tsv"
+  },{
+    "is kb":false,
+    "relation file":"/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/FB15k-237/pra_graph_input/valid.tsv"
+  }]
+}
