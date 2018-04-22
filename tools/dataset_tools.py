@@ -244,3 +244,12 @@ def ensure_one_to_one_negative_examples(dataset_path):
         print('There seems to be everything ok with the proportion of negative and positive examples.')
     else:
         print('There is NOT a one-to-one relation between positive and negative examples.')
+
+
+# def generate_negative_training_examples(train_fpath, bern):
+#     """Generates negative examples for training following the Bernoulli sampling procedure proposed
+#     by Wang el al. (2014) if `bern=True` or using a uniform distribution if `bern=False`.
+#     """
+#     prob = 500
+#     if bern:
+#         prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]);
