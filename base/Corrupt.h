@@ -125,7 +125,7 @@ INT corrupt(INT h, INT r){
 	INT loop = 0;
 	INT t;
 	while(1) {
-		t = tail_type[rand(ll, rr)]; // randomly get one of the observed entities in the tail position
+		t = tail_type[rand(ll, rr)]; // randomly get one of the observed entities in the tail position (type constrained)
 		if (not _find(h, t, r)) { // check if the entity is not observed in the dataset (including train and valid, but not test)
 		//	printf("r:%ld\tt:%ld\n", r, t);
 			return t;

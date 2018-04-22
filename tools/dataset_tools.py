@@ -190,7 +190,10 @@ def generate_type_constrain_file(dataset_path='./', fname='/type_constrain.txt')
 
 
 def read_type_constrain_file(filepath):
-    """Parses a type_constrain file into a dict.
+    """Parses a type_constrain file into a dict. Each key in the dict is a relation and each value
+    another dict. This second dict has two keys: head and tail. Each value of this second dict is a
+    set of entities that were observed in that position (head or tail) of the graph for the
+    respective relation.
     """
     with open(filepath, 'r') as f:
         content = f.read()
