@@ -1,0 +1,10 @@
+{
+  "name":"WN18RR",
+  "relation sets":[{
+    "is kb":false,
+    "relation file":"/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/WN18RR/pra_graph_input/train.tsv"
+  },{
+    "is kb":false,
+    "relation file":"/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/WN18RR/pra_graph_input/valid.tsv"
+  }]
+}
