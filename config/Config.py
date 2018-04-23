@@ -23,7 +23,7 @@ class Config(object):
         self.lib.test_triple_classification.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
         self.test_flag = False
         self.in_path = "./"
-        self.out_path = "./"
+        self.out_path = None
         self.bern = 0
         self.hidden_size = 100
         self.ent_size = self.hidden_size
