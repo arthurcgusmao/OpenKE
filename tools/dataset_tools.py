@@ -3,6 +3,7 @@ datasets."""
 
 import pandas as pd
 import numpy as np
+import random
 
 
 def create_name2id_dicts_from_df(df):
@@ -246,10 +247,69 @@ def ensure_one_to_one_negative_examples(dataset_path):
         print('There is NOT a one-to-one relation between positive and negative examples.')
 
 
-# def generate_negative_training_examples(train_fpath, bern):
-#     """Generates negative examples for training following the Bernoulli sampling procedure proposed
-#     by Wang el al. (2014) if `bern=True` or using a uniform distribution if `bern=False`.
-#     """
-#     prob = 500
-#     if bern:
-#         prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]);
+def get_bern_prob_corrupt_tail(type_constrain_dict):
+    """Gets the probability of the tail be corrupted when generating negative examples using the
+    Bernoulli distribution proposed by Wang et al. (2014).
+
+    Arguments:
+    - type_constrain_dict: A dictionary where each key in the dict is a relation and each value
+    another dict. This second dict has two keys: head and tail. Each value of this second dict is a
+    set of entities that were observed in that position (head or tail) of the graph for the
+    respective relation. See `read_type_constrain_file()` function.
+    """
+    relations = range(len(type_constrain_dict))
+    prob_corrupt_tail = {}
+    for r in relations:
+        tph = float(len(type_constrain_dict[r]['tail'])) / len(type_constrain_dict[r]['head'])
+        hpt = tph**(-1) # head_per_tail is the inverse of tail_per_head
+        prob_corrupt_tail[r] = hpt / (hpt + tph)
+    return prob_corrupt_tail
+
+
+def generate_corrupted_training_examples(dataset_path, neg_proportion=1, bern=True,
+                                         output_include_pos=True):
+    """Generates negative examples for training following the Bernoulli sampling procedure proposed
+    by Wang el al. (2014) if `bern=True` or using a uniform distribution if `bern=False`. A list is
+    returned, where each element is a dict representing a triple (with keys = head, tail and
+    relation).
+
+    Arguments:
+    - dataset_path: path of the dataset for which positive training examples will be corrupted
+    - neg_proportion: proportion of negative examples for each positive one
+    - bern: flag indicating that the bernoulli distribution will be used to corrupt head vs tail
+    """
+    train_triples = pd.read_csv(dataset_path + '/train2id.txt', sep=' ', skiprows=1, names=['head', 'tail', 'relation'])
+    tc_dict = read_type_constrain_file(dataset_path + '/type_constrain.txt')
+    # get a set of all entities present in test data
+    ents = set()
+    ents.update(train_triples['head'].unique())
+    ents.update(train_triples['tail'].unique())
+
+    if bern:
+        prob_corrupt_tail = get_bern_prob_corrupt_tail(tc_dict)
+    else:
+        relations = train_triples['relation'].unique()
+        prob_corrupt_tail = {rel: 0.5 for rel in relations}
+
+    output = []
+    for idx, row in train_triples.iterrows():
+        r = row['relation']
+        h = row['head']
+        t = row['tail']
+        if output_include_pos:
+            output.append({'head': h,
+                           'tail': t,
+                           'relation': r,
+                           'label': 1})
+        for _ in range(neg_proportion):
+            if prob_corrupt_tail[r] < random.random():
+                t_ = random.sample(ents, 1)[0]
+                h_ = h
+            else:
+                h_ = random.sample(ents, 1)[0]
+                t_ = t
+            output.append({'head': h_,
+                           'tail': t_,
+                           'relation': r,
+                           'label': -1})
+    return output

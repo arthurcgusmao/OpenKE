@@ -58,7 +58,7 @@ struct Parameter {
 
 void* getBatch(void* con) {
 	Parameter *para = (Parameter *)(con);
-	INT id = para -> id;
+	INT id = para -> id; // id is the processor thread id
 	INT *batch_h = para -> batch_h;
 	INT *batch_t = para -> batch_t;
 	INT *batch_r = para -> batch_r;
@@ -85,7 +85,10 @@ void* getBatch(void* con) {
 		INT last = batchSize;
 		for (INT times = 0; times < negRate; times ++) {
 			if (bernFlag) // bernFlag signals that we should use the Bernoulli distribution for creating negative examples proposed by Wang el al. (2014).
-				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]);
+				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]); // this should be the probability of corrupting by replacing the tail (I have to verify the code yet)
+				// with the assumption above:
+				//  right_mean: should be the average number of head entities per tail entity, but I haven't understood the code below yet = hpt
+				//  left_mean: should be the average number of tail entities per head entity, but I haven't understood the code below yet = tph
 			if (randd(id) % 1000 < prob) {
 				batch_h[batch + last] = trainList[i].h;
 				batch_t[batch + last] = corrupt_head(id, trainList[i].h, trainList[i].r);

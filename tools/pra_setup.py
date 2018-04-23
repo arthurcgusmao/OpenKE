@@ -1,12 +1,14 @@
-"""Functions that help us setup PRA to run on the datasets.
-
-   Outputs from these function will be located in a folder named `pra` under
-   the directory of the respective dataset.
+"""Functions that help us to setup dependencies (datasets, splits, etc.) for PRA to be run.
 """
 
 import os
 import numpy as np
 import pandas as pd
+
+
+def ensure_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 
 def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'valid.txt'],
@@ -25,8 +27,7 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
     """
     # ensure the `pra` directory exists
     pra_input_dir = dataset_dirpath + '/pra_graph_input/'
-    if not os.path.exists(pra_input_dir):
-        os.makedirs(pra_input_dir)
+    ensure_dir(pra_input_dir)
 
     # read content of names files
     for fname in names_fname:
@@ -55,36 +56,37 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
 
 ## ideally, these files will be placed under the directory of a specific (trained) model,
 ## to separate different predictions
-def create_split(datasets_dirpath, split_dirpath, folds=['train.tsv', 'valid.tsv', 'test.tsv'],
-                 extension='.tsv'):
+def create_split(dfs, splits_dirpath, split_name):
     """Creates a split directory that PRA algorithm can use for the respective dataset.
 
     Arguments:
-    - datasets_dirpath: path to the dataset directory where all files should be in
-    - folds: a list of folds (data sets) (e.g., train.tsv, test.tsv, valid.tsv). Each fold should
-    be written in the following order: [head, relation, tail, label], tab-separated.
+    - dfs: a dict whose keys are fold names (e.g. "train", "test") and values are DataFrames with
+    head, tail, relation, and label columns.
+    - split_dirpath: path where the split should be created.
     """
-    # read datasets into dfs
-    dfs = {}
-    for fold in folds:
-        fold_name = fold.replace(extension, '')
-        path = datasets_dirpath + fold
-        dfs[fold_name] = pd.read_csv(path, sep='\t', skiprows=0,
-                                     names=['head', 'relation', 'tail', 'label'])
+    this_split_path = splits_dirpath + '/' + split_name
+    ensure_dir(splits_dirpath)
+    if not os.path.exists(this_split_path):
+        os.makedirs(this_split_path)
+    else:
+        raise ValueError('Split {} already exists in {}.'.format(
+                split_name, splits_dirpath))
 
     # get relations
     rels = set()
     for _, df in dfs.iteritems():
-        rels.add(df['relation'].unique())
+        rels.update(df['relation'].unique())
 
     # create relations_to_run.tsv file
-    with open(split_dirpath + '/relations_to_run.tsv', 'w') as f:
+    with open(this_split_path + '/relations_to_run.tsv', 'w') as f:
         for rel in rels:
-            f.write(rel + '\n')
+            f.write('{}\n'.format(rel))
 
     # create each relation dir and its files
     for rel in rels:
         for fold_name, df in dfs.iteritems():
+            relpath = '{}/{}/'.format(this_split_path, rel)
+            ensure_dir(relpath)
             filtered = df.loc[df['relation'] == rel]
-            filtered.to_csv(split_dirpath + '/' + rel + '/' + fold_name + '.tsv',
+            filtered.to_csv('{}/{}.tsv'.format(relpath, fold_name),
                             columns=['head', 'tail', 'label'], index=False, header=False, sep='\t')
