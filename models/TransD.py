@@ -8,8 +8,11 @@ class TransD(Model):
 	def _transfer(self, e, t, r):
 		return e + tf.reduce_sum(e * t, 1, keepdims = True) * r
 
-	def _calc(self, h, t, r):
+	def _calc_l1(self, h, t, r):
 		return abs(h + r - t)
+
+	def _calc_l2(self, h, t, r):
+		return (h + r - t)**2
 
 	def embedding_def(self):
 		#Obtaining the initial configuration of the model
@@ -23,6 +26,11 @@ class TransD(Model):
 								"rel_embeddings":self.rel_embeddings, \
 								"ent_transfer":self.ent_transfer, \
 								"rel_transfer":self.rel_transfer}
+		# get norm to be used in score calculation (l1 or l2)
+		if config.score_norm == 'l2':
+			self._calc = self._calc_l2
+		else:
+			self._calc = self._calc_l1
 
 	def loss_def(self):
 		#Obtaining the initial configuration of the model

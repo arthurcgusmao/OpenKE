@@ -8,8 +8,11 @@ class TransR(Model):
 	def _transfer(self, transfer_matrix, embeddings):
 		return tf.batch_matmul(transfer_matrix, embeddings)
 
-	def _calc(self, h, t, r):
+	def _calc_l1(self, h, t, r):
 		return abs(h + r - t)
+
+	def _calc_l2(self, h, t, r):
+		return (h + r - t)**2
 
 	def embedding_def(self):
 		#Obtaining the initial configuration of the model
@@ -21,6 +24,11 @@ class TransR(Model):
 		self.parameter_lists = {"ent_embeddings":self.ent_embeddings, \
 								"rel_embeddings":self.rel_embeddings, \
 								"transfer_matrix":self.transfer_matrix}
+		# get norm to be used in score calculation (l1 or l2)
+		if config.score_norm == 'l2':
+			self._calc = self._calc_l2
+		else:
+			self._calc = self._calc_l1
 
 	def loss_def(self):
 		#Obtaining the initial configuration of the model

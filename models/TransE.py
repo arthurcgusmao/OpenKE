@@ -5,8 +5,11 @@ from Model import *
 
 class TransE(Model):
 
-	def _calc(self, h, t, r):
+	def _calc_l1(self, h, t, r):
 		return abs(h + r - t)
+
+	def _calc_l2(self, h, t, r):
+		return (h + r - t)**2
 
 	def embedding_def(self):
 		#Obtaining the initial configuration of the model
@@ -16,6 +19,11 @@ class TransE(Model):
 		self.rel_embeddings = tf.get_variable(name = "rel_embeddings", shape = [config.relTotal, config.hidden_size], initializer = tf.contrib.layers.xavier_initializer(uniform = False))
 		self.parameter_lists = {"ent_embeddings":self.ent_embeddings, \
 								"rel_embeddings":self.rel_embeddings}
+		# get norm to be used in score calculation (l1 or l2)
+		if config.score_norm == 'l2':
+			self._calc = self._calc_l2
+		else:
+			self._calc = self._calc_l1
 
 	def loss_def(self):
 		#Obtaining the initial configuration of the model
@@ -50,5 +58,3 @@ class TransE(Model):
 		predict_t_e = tf.nn.embedding_lookup(self.ent_embeddings, predict_t)
 		predict_r_e = tf.nn.embedding_lookup(self.rel_embeddings, predict_r)
 		self.predict = tf.reduce_mean(self._calc(predict_h_e, predict_t_e, predict_r_e), 1, keepdims = False)
-
-		

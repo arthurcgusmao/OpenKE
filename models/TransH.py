@@ -9,8 +9,11 @@ class TransH(Model):
 		norm = n
 		return e - tf.reduce_sum(e * norm, 1, keepdims = True) * norm
 
-	def _calc(self, h, t, r):
+	def _calc_l1(self, h, t, r):
 		return abs(h + r - t)
+
+	def _calc_l2(self, h, t, r):
+		return (h + r - t)**2
 
 	def embedding_def(self):
 		#Obtaining the initial configuration of the model
@@ -22,6 +25,11 @@ class TransH(Model):
 		self.parameter_lists = {"ent_embeddings":self.ent_embeddings, \
 								"rel_embeddings":self.rel_embeddings, \
 								"normal_vectors":self.normal_vectors}
+		# get norm to be used in score calculation (l1 or l2)
+		if config.score_norm == 'l2':
+			self._calc = self._calc_l2
+		else:
+			self._calc = self._calc_l1
 
 	def loss_def(self):
 		#Obtaining the initial configuration of the model
@@ -73,7 +81,3 @@ class TransH(Model):
 		t_e = self._transfer(predict_t_e, predict_norm)
 		r_e = predict_r_e
 		self.predict = tf.reduce_sum(self._calc(h_e, t_e, r_e), 1, keepdims = True)
-
-
-
-		
