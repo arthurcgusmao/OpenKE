@@ -69,8 +69,10 @@ def create_split(dfs, splits_dirpath, split_name):
     if not os.path.exists(this_split_path):
         os.makedirs(this_split_path)
     else:
-        raise ValueError('Split {} already exists in {}.'.format(
-                split_name, splits_dirpath))
+        print('Split already exists: {}.'.format(this_split_path))
+        return None
+        # raise ValueError('Split {} already exists in {}.'.format(
+        #         split_name, splits_dirpath))
 
     # get relations
     rels = set()

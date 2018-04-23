@@ -207,7 +207,7 @@ class Config(object):
     def save_tensorflow(self):
         with self.graph.as_default():
             with self.sess.as_default():
-                print self.saver.save(self.sess, self.exportName)
+                self.saver.save(self.sess, self.exportName)
 
     def restore_tensorflow(self):
         with self.graph.as_default():
