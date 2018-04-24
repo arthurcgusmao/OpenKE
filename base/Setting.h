@@ -94,4 +94,12 @@ void setBern(INT con) {
 	bernFlag = con;
 }
 
+INT shuffleFlag = 0;
+INT shuffled_trainList_iter = -1;
+
+extern "C"
+void setShuffle(INT con) {
+	shuffleFlag = con;
+}
+
 #endif

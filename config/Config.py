@@ -50,11 +50,13 @@ class Config(object):
         self.test_link_prediction = False
         self.test_triple_classification = False
         self.log = {} # logging dict where we'll save information about training/testing
+        self.shuffle = 1 # shuffle the training set for each epoch (instead of randomly sampling from it)
     def init(self):
         self.trainModel = None
         if self.in_path != None:
             self.lib.setInPath(ctypes.create_string_buffer(self.in_path, len(self.in_path) * 2))
             self.lib.setBern(self.bern)
+            self.lib.setShuffle(self.shuffle)
             self.lib.setWorkThreads(self.workThreads)
             self.lib.randReset()
             self.lib.importTrainFiles()

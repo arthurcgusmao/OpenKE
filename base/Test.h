@@ -272,11 +272,11 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
             }
         }
         relThresh[r] = bestThresh;
-        printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
+        // printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
         correct_all_relations += bestCorrect;
     }
     validAcc = 1.0 * correct_all_relations / total_all_relations;
-    printf("validation best accuracy is %lf\n", valid_acc);
+    // printf("validation best accuracy is %lf\n", valid_acc);
 }
 
 REAL threshold_for_relation;
@@ -302,10 +302,10 @@ void test_triple_classification(REAL *score_pos, REAL *score_neg) {
         testAcc[r] = 1.0 * correct / total;
         aveCorrect += correct;
         aveTotal += total;
-        printf("relation %ld: triple classification accuracy is %lf\n", r, testAcc[r]);
+        // printf("relation %ld: triple classification accuracy is %lf\n", r, testAcc[r]);
     }
     aveAcc = 1.0 * aveCorrect / aveTotal;
-    printf("average accuracy is %lf\n", aveAcc);
+    // printf("average accuracy is %lf\n", aveAcc);
 }
 
 #endif
