@@ -77,7 +77,7 @@ void* getBatch(void* con) {
 	}
 	REAL prob = 500;
 	for (INT batch = lef; batch < rig; batch++) {
-		INT i = rand_max(id, trainTotal);
+		INT i = rand_max(id, trainTotal); // randomly gets a number that corresponds to an example from the training set
 		batch_h[batch] = trainList[i].h;
 		batch_t[batch] = trainList[i].t;
 		batch_r[batch] = trainList[i].r;
