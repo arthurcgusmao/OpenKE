@@ -234,7 +234,6 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
     REAL interval, min_score, max_score, bestThresh, tmpThresh, bestAcc, tmpAcc;
     INT n_interval, correct, total;
     INT total_all_relations, correct_all_relations, bestCorrect;
-    REAL valid_acc;
     total_all_relations = 0;
     correct_all_relations = 0;
     for (INT r = 0; r < relationTotal; r++) {
@@ -276,7 +275,7 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
         correct_all_relations += bestCorrect;
     }
     validAcc = 1.0 * correct_all_relations / total_all_relations;
-    // printf("validation best accuracy is %lf\n", valid_acc);
+    // printf("validation best accuracy is %lf\n", validAcc);
 }
 
 REAL threshold_for_relation;
