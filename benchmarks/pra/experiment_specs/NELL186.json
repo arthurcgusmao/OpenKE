@@ -1,0 +1,18 @@
+{
+    "graph": {
+        "name": "NELL186",
+        "relation sets": [
+            {
+                "is kb": false,
+                "relation file": "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/NELL186/pra_graph_input/train.tsv"
+            },
+            {
+                "is kb": false,
+                "relation file": "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/NELL186/pra_graph_input/valid.tsv"
+            }
+        ]
+    },
+    "operation": {
+        "type": "no op"
+    }
+}
