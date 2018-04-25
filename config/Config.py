@@ -288,6 +288,8 @@ class Config(object):
                         self.optimizer = tf.train.AdadeltaOptimizer(self.alpha)
                     elif self.opt_method == "Adam" or self.opt_method == "adam":
                         self.optimizer = tf.train.AdamOptimizer(self.alpha)
+                    elif self.opt_method == "RMSProp" or self.opt_method == "rmsprop":
+                        self.optimizer = tf.train.RMSPropOptimizer(self.alpha)
                     else:
                         self.optimizer = tf.train.GradientDescentOptimizer(self.alpha)
                     grads_and_vars = self.optimizer.compute_gradients(self.trainModel.loss)
