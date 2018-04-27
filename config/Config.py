@@ -51,6 +51,11 @@ class Config(object):
         self.test_triple_classification = False
         self.log = {} # logging dict where we'll save information about training/testing
         self.shuffle = 1 # shuffle the training set for each epoch (instead of randomly sampling from it)
+        # start tf operations to be run for the classify function --------
+        self.classify_scores = None
+        self.classify_relations = None
+        self.classify_classes = None
+        # end tf operations to be run for the classify function --------
     def init(self):
         self.trainModel = None
         if self.in_path != None:
@@ -427,15 +432,22 @@ class Config(object):
         return thres_list
 
 
-    def classify(self, heads, tails, rels, batch_size=10000):
+    def setup_classify_graph(self, rels):
         """Returns the classification of a set of triples, using the validation threshold."""
         thres_list = self.get_threshold_list_for_relations(rels)
         thres_params = tf.constant(thres_list)
 
-        scores = tf.placeholder(tf.float32, [None])
-        relations = tf.placeholder(tf.int64, [None])
-        thresholds = tf.gather(thres_params, relations)
-        classes = tf.less(scores, thresholds)
+        self.classify_scores = tf.placeholder(tf.float32, [None])
+        self.classify_relations = tf.placeholder(tf.int64, [None])
+        thresholds = tf.gather(thres_params, self.classify_relations)
+        self.classify_classes = tf.less(self.classify_scores, thresholds)
+
+
+    def classify(self, heads, tails, rels, batch_size=10000):
+        """Runs the graph created by classify setup.
+        """
+        if self.classify_classes == None:
+            self.setup_classify_graph(rels)
 
         if len(rels) % batch_size == 0:
             total_iters = len(rels) / batch_size
@@ -448,9 +460,9 @@ class Config(object):
                 print("Classifying iteration {} of {}".format(i, total_iters))
                 start = (i) * batch_size
                 end = (i+1) * batch_size
-                res = tf.Session().run(classes, feed_dict={
-                    scores: self.test_step(heads[start:end], tails[start:end], rels[start:end]).reshape(-1),
-                    relations: rels[start:end]
+                res = tf.Session().run(self.classify_classes, feed_dict={
+                    self.classify_scores: self.test_step(heads[start:end], tails[start:end], rels[start:end]).reshape(-1),
+                    self.classify_relations: rels[start:end]
                 })
                 output = np.concatenate((output, res))
         return output
