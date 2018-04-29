@@ -13,7 +13,8 @@ def ensure_dir(path):
 
 def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'valid.txt'],
                        order=['head', 'relation', 'tail'], sep='\t', skiprows=0,
-                       labels=['valid.txt', 'test.txt'], extension='.txt'):
+                       labels=['valid.txt', 'test.txt'], extension='.txt',
+                       graph_input_dirname='/pra_graph_input/'):
     """Creates a `xxx.tsv` files that contain a positive observation for each row in the order
     (head, relation, tail), tab-separated. Takes as input `xxx.txt` files, tab-separated, where
     each row represents an observation with columns in the same order, that can have a 4th column
@@ -26,8 +27,12 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
     correct thing to do.
     """
     # ensure the `pra` directory exists
-    pra_input_dir = dataset_dirpath + '/pra_graph_input/'
-    ensure_dir(pra_input_dir)
+    pra_input_dir = dataset_dirpath + graph_input_dirname
+    if os.path.exists(pra_input_dir):
+        print("{} already exists, skipping...".format(pra_input_dir))
+        return
+    else:
+        os.makedirs(pra_input_dir)
 
     # read content of names files
     for fname in names_fname:
