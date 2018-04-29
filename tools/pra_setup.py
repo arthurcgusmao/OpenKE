@@ -27,7 +27,7 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
     correct thing to do.
     """
     # ensure the `pra` directory exists
-    pra_input_dir = dataset_dirpath + graph_input_dirname
+    pra_input_dir = dataset_dirpath + '/' + graph_input_dirname + '/'
     if os.path.exists(pra_input_dir):
         print("{} already exists, skipping...".format(pra_input_dir))
         return
