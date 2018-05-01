@@ -7,6 +7,7 @@ from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import VarianceThreshold, SelectKBest, chi2
 
 from feature_matrices import parse_feature_matrices
 import dataset_tools
@@ -71,7 +72,7 @@ class Explanator(object):
                                          max_iter=100000,
                                          tol=1e-3,
                                          class_weight="balanced",
-					 n_jobs=4)
+					                     n_jobs=4)
         self.grid_search = GridSearchCV(model_definition, param_grid, n_jobs=4)
 
 
@@ -142,6 +143,14 @@ class Explanator(object):
         self.true_train_y = self.train_data.pop('true_label')
         self.train_x = self.train_data.drop(['head', 'tail'], axis=1)
 
+        # Save features names and number of features before pre-processing
+        self.columns = self.train_x.columns
+        self.stats['# Features'] = self.train_x.shape[0]
+        
+        # Define feature selection
+        k = min(1000, self.stats['# Features'])
+        self.sel = SelectKBest(chi2, k=k)
+
         # Get true labels for target relations (validation data)
         rel_true_valid = true_valid[true_valid['rel_name']==self.target_relation].copy()
 
@@ -171,9 +180,29 @@ class Explanator(object):
 
     def train(self):
         """ Train and evaluate the model """
+
         # Search for the best parameters
+        training_examples = pd.concat([self.train_x, self.valid_x])
+        training_examples_y = pd.concat([self.train_y, self.valid_y])
+        training_examples = self.sel.fit_transform(training_examples, training_examples_y)
+
+        self.train_x = self.sel.transform(self.train_x)
+        self.train_x = self.sel.inverse_transform(self.train_x)
+        self.train_x = pd.DataFrame(self.train_x, columns=self.columns)
+        self.train_x.loc[:, (self.train_x != 0).any(axis=0)]
+
+        self.test_x = self.sel.transform(self.test_x)
+        self.test_x = self.sel.inverse_transform(self.test_x)
+        self.test_x = pd.DataFrame(self.test_x, columns=self.columns)
+        self.test_x.loc[:, (self.test_x != 0).any(axis=0)]
+
+        self.valid_x = self.sel.transform(self.valid_x)
+        self.valid_x = self.sel.inverse_transform(self.valid_x)
+        self.valid_x = pd.DataFrame(self.valid_x, columns=self.columns)
+        self.valid_x.loc[:, (self.valid_x != 0).any(axis=0)]
+
         try:
-            self.grid_search.fit(pd.concat([self.train_x, self.valid_x]), pd.concat([self.train_y, self.valid_y]))
+            self.grid_search.fit(training_examples, pd.concat([self.train_y, self.valid_y]))
             #self.grid_search.fit(self.train_x, self.train_y)
         except:
             print("Not possible to fit a logit for this relation because it contains a single class.")
@@ -186,7 +215,9 @@ class Explanator(object):
         # We need to refit it because GridSearchCV does give access to coef_
         self.model = SGDClassifier(l1_ratio=l1_ratio, alpha=alpha, loss="log", penalty="elasticnet",
                       max_iter=100000, tol=1e-3, class_weight="balanced")
+
         self.model.fit(self.train_x, self.train_y)
+        
         ### Get evaluation metrics
         # Get accuracy
         if self.test_exists:
@@ -316,8 +347,7 @@ class Explanator(object):
         self.explanation = self.explanation.sort_values(by="scores", ascending=False)
         explanation = self.explanation[self.explanation['scores'] != 0]
         self.most_relevant_variables = pd.concat([explanation.iloc[0:10], explanation.iloc[-10:-1]])
-        self.stats['# Features'] = self.explanation[self.explanation['scores'] != 0].shape[0]
-        self.stats['# Relevant Features'] = self.explanation.shape[0]
+        self.stats['# Relevant Features'] = self.explanation[self.explanation['scores'] != 0].shape[0]
 
     def report(self):
         file_path = os.path.join(self.data_path, self.target_relation, self.target_relation + '_explained.txt')
@@ -417,7 +447,7 @@ if __name__ == '__main__':
                     print('    Saving to csv')
                     exp.append_to_dataframe()
                     exp.export_dataframe(data_path + data_base_name + '.csv')
-		    print('    Generating per-example explanations')
+                    print('    Generating per-example explanations')
                     exp.explain_per_example(data_path, 'test')
             else:
                 print("No test data for ", target_relation, " data")
