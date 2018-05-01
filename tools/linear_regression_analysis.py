@@ -70,8 +70,9 @@ class Explanator(object):
                                          penalty="elasticnet",
                                          max_iter=100000,
                                          tol=1e-3,
-                                         class_weight="balanced")
-        self.grid_search = GridSearchCV(model_definition, param_grid)
+                                         class_weight="balanced",
+					 n_jobs=4)
+        self.grid_search = GridSearchCV(model_definition, param_grid, n_jobs=4)
 
 
     def append_to_dataframe(self):
@@ -279,7 +280,7 @@ class Explanator(object):
         return True
 
 
-    def explain_per_example(self, data_type):
+    def explain_per_example(self, data_path, data_type):
         coefficients = self.model.coef_.reshape(-1,1)
         if data_type == 'train':
             x = self.train_x
@@ -302,7 +303,7 @@ class Explanator(object):
         answers = self.model.predict_proba(x)[:, 1]
         final_reasons['y_logit'] = answers
         final_reasons['y_hat'] = y
-        final_reasons.to_csv('./' + self.target_relation + '/' + self.target_relation + '.csv')
+        final_reasons.to_csv(data_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv')
         return final_reasons
 
     def explain(self):
@@ -395,25 +396,29 @@ if __name__ == '__main__':
                'l1_ratio', 'alpha'
               ]
     
-    data_base_names = ['NELL']
+    data_base_names = ['FB13', 'WN11', 'g_hat_WN11']
     for data_base_name in data_base_names:
 
-        # Export dataframe headers to csv
-        complete_dataframe = pd.DataFrame(columns=columns)
-        complete_dataframe.to_csv('../results/NELL186/TransE/1524632595/pra_explain/results/extract_feat__neg_by_random/' + data_base_name + '.csv', index=False)
-
         data_path, original_data_path, corrupted_data_path, target_relations = get_target_relations(data_base_name)
+
+	# Export dataframe headers to csv
+        complete_dataframe = pd.DataFrame(columns=columns)
+        complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
 
         for target_relation in target_relations:
             print("Training on " + target_relation + " relations")
             exp = Explanator(complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
             if exp.extract_data():
                 if exp.train():
+                    print('    Generating explanation')
                     exp.explain()
+                    print('    Generating report')
                     exp.report()
+                    print('    Saving to csv')
                     exp.append_to_dataframe()
-                    exp.export_dataframe('../results/NELL186/TransE/1524632595/pra_explain/results/extract_feat__neg_by_random/' + data_base_name + '.csv')
-                # exp.explain_per_example('test')
+                    exp.export_dataframe(data_path + data_base_name + '.csv')
+		    print('    Generating per-example explanations')
+                    exp.explain_per_example(data_path, 'test')
             else:
                 print("No test data for ", target_relation, " data")
         
