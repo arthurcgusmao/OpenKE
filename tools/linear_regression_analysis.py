@@ -30,6 +30,14 @@ def get_target_relations(data_set_name):
         data_path = '../results/WN11/TransE/1524623630/pra_explain/results/results/g_hat_5nn_2negrate_bern'
         original_data_path = '../benchmarks/WN11'
         corrupted_data_path = '../benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
+    elif data_set_name == 'g_hat_NELL':
+        data_path = '../results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
+        original_data_path = '../benchmarks/NELL186'
+        corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
+
+
+
+
     return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
 
 def get_reasons(row):
@@ -145,10 +153,10 @@ class Explanator(object):
 
         # Save features names and number of features before pre-processing
         self.columns = self.train_x.columns
-        self.stats['# Features'] = self.train_x.shape[0]
+        self.stats['# Features'] = self.train_x.shape[1]
         
         # Define feature selection
-        k = min(1000, self.stats['# Features'])
+        k = min([1000, self.stats['# Features']])
         self.sel = SelectKBest(chi2, k=k)
 
         # Get true labels for target relations (validation data)
@@ -182,8 +190,12 @@ class Explanator(object):
         """ Train and evaluate the model """
 
         # Search for the best parameters
-        training_examples = pd.concat([self.train_x, self.valid_x])
-        training_examples_y = pd.concat([self.train_y, self.valid_y])
+	try:
+        	training_examples = pd.concat([self.train_x, self.valid_x], axis=0)
+        	training_examples_y = pd.concat([self.train_y, self.valid_y], axis=0)
+	except:
+		training_examples = self.train_x
+        	training_examples_y = self.train_y
         training_examples = self.sel.fit_transform(training_examples, training_examples_y)
 
         self.train_x = self.sel.transform(self.train_x)
@@ -191,15 +203,16 @@ class Explanator(object):
         self.train_x = pd.DataFrame(self.train_x, columns=self.columns)
         self.train_x.loc[:, (self.train_x != 0).any(axis=0)]
 
-        self.test_x = self.sel.transform(self.test_x)
-        self.test_x = self.sel.inverse_transform(self.test_x)
-        self.test_x = pd.DataFrame(self.test_x, columns=self.columns)
-        self.test_x.loc[:, (self.test_x != 0).any(axis=0)]
-
-        self.valid_x = self.sel.transform(self.valid_x)
-        self.valid_x = self.sel.inverse_transform(self.valid_x)
-        self.valid_x = pd.DataFrame(self.valid_x, columns=self.columns)
-        self.valid_x.loc[:, (self.valid_x != 0).any(axis=0)]
+	if self.test_exists:
+	    self.test_x = self.sel.transform(self.test_x)
+	    self.test_x = self.sel.inverse_transform(self.test_x)
+	    self.test_x = pd.DataFrame(self.test_x, columns=self.columns)
+	    self.test_x.loc[:, (self.test_x != 0).any(axis=0)]
+	if self.valid_exists:
+	    self.valid_x = self.sel.transform(self.valid_x)
+	    self.valid_x = self.sel.inverse_transform(self.valid_x)
+	    self.valid_x = pd.DataFrame(self.valid_x, columns=self.columns)
+	    self.valid_x.loc[:, (self.valid_x != 0).any(axis=0)]
 
         try:
             self.grid_search.fit(training_examples, pd.concat([self.train_y, self.valid_y]))
@@ -355,8 +368,8 @@ class Explanator(object):
         np.savetxt(file_path, self.most_relevant_variables.values, fmt= '%s')
         with open(file_path, 'a') as f:
             f.write("\n---------------------------------------------")
-            f.write("\nNumber of relevant variables : %0.2f" % self.stats['# Features'])
-            f.write("\nTotal number of variables : %0.2f" % self.stats['# Relevant Features'])
+            f.write("\nNumber of relevant variables : %0.2f" % self.stats['# Relevant Features'])
+            f.write("\nTotal number of variables : %0.2f" % self.stats['# Features'])
             f.write("\n\nDataset Positive Ratio:")
             f.write("\n   Test : %0.2f" % self.stats['Test Positive Ratio'])
             f.write("\n   True test: %0.2f" % self.stats['True Test Positive Ratio'])
@@ -426,7 +439,7 @@ if __name__ == '__main__':
                'l1_ratio', 'alpha'
               ]
     
-    data_base_names = ['FB13', 'WN11', 'g_hat_WN11']
+    data_base_names = ['g_hat_NELL']
     for data_base_name in data_base_names:
 
         data_path, original_data_path, corrupted_data_path, target_relations = get_target_relations(data_base_name)
@@ -434,7 +447,7 @@ if __name__ == '__main__':
 	# Export dataframe headers to csv
         complete_dataframe = pd.DataFrame(columns=columns)
         complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
-
+	target_relations.remove('concept:worksfor')
         for target_relation in target_relations:
             print("Training on " + target_relation + " relations")
             exp = Explanator(complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
