@@ -42,7 +42,7 @@ void importTrainFiles() {
 	trainHead = (Triple *)calloc(trainTotal, sizeof(Triple));
 	trainTail = (Triple *)calloc(trainTotal, sizeof(Triple));
 	trainRel = (Triple *)calloc(trainTotal, sizeof(Triple));
-	freqRel = (INT *)calloc(relationTotal, sizeof(INT));
+	freqRel = (INT *)calloc(relationTotal, sizeof(INT)); // freqRel[r_i] is the number of times the relation r_i was seen in trainList
 	freqEnt = (INT *)calloc(entityTotal, sizeof(INT));
 	for (INT i = 0; i < trainTotal; i++) {
 		tmp = fscanf(fin, "%ld", &trainList[i].h);
@@ -65,17 +65,31 @@ void importTrainFiles() {
 			freqRel[trainList[i].r]++;
 		}
 
-	std::sort(trainHead, trainHead + trainTotal, Triple::cmp_head);
-	std::sort(trainTail, trainTail + trainTotal, Triple::cmp_tail);
-	std::sort(trainRel, trainRel + trainTotal, Triple::cmp_rel);
+	// block below stores the training data into three equivalent lists,
+	// that differ by their sorting.
+	std::sort(trainHead, trainHead + trainTotal, Triple::cmp_head); // sorted by head entitiy (and then relation, and then tail)
+	std::sort(trainTail, trainTail + trainTotal, Triple::cmp_tail); // sorted by tail entity (and then relation, and then head)
+	std::sort(trainRel, trainRel + trainTotal, Triple::cmp_rel); // sorted by head entity (and then tail, and then relation)
 	printf("The total of train triples is %ld.\n", trainTotal);
 
-	lefHead = (INT *)calloc(entityTotal, sizeof(INT));
-	rigHead = (INT *)calloc(entityTotal, sizeof(INT));
-	lefTail = (INT *)calloc(entityTotal, sizeof(INT));
-	rigTail = (INT *)calloc(entityTotal, sizeof(INT));
-	lefRel = (INT *)calloc(entityTotal, sizeof(INT));
-	rigRel = (INT *)calloc(entityTotal, sizeof(INT));
+	// //--------------------------------------
+	// printf("\n\n*** Starting to print DEBUG ***\n\n");
+	// for (INT i = 0; i < trainTotal; i++) {
+	// 	printf("(%li, %li, %li)\n", trainHead[i].h, trainHead[i].r, trainHead[i].t);
+	// }
+	// printf("----------------\n");
+	// for (INT i = 0; i < trainTotal; i++) {
+	// 	printf("(%li, %li, %li)\n", trainRel[i].h, trainRel[i].r, trainRel[i].t);
+	// }
+	// printf("\n*** End of print DEBUG ***\n\n\n");
+	// //--------------------------------------
+
+	lefHead = (INT *)calloc(entityTotal, sizeof(INT)); // lefHead[e_i] is the first index for triples whose head is e_i in trainHead
+	rigHead = (INT *)calloc(entityTotal, sizeof(INT)); // rigHead[e_i] is the last index for triples whose head is e_i in trainHead
+	lefTail = (INT *)calloc(entityTotal, sizeof(INT)); // lefTail[e_i] is the first index for triples whose tail is e_i in trainTail
+	rigTail = (INT *)calloc(entityTotal, sizeof(INT)); // rigTail[e_i] is the last index for triples whose tail is e_i in trainTail
+	lefRel = (INT *)calloc(entityTotal, sizeof(INT)); // lefRel[e_i] is the first index for triples whose head is e_i in trainRel
+	rigRel = (INT *)calloc(entityTotal, sizeof(INT)); // rigRel[e_i] is the last index for triples whose head is e_i in trainRel
 	memset(rigHead, -1, sizeof(INT)*entityTotal);
 	memset(rigTail, -1, sizeof(INT)*entityTotal);
 	memset(rigRel, -1, sizeof(INT)*entityTotal);
@@ -115,8 +129,8 @@ void importTrainFiles() {
 			right_mean[trainTail[lefTail[i]].r] += 1.0;
 	}
 	for (INT i = 0; i < relationTotal; i++) {
-		left_mean[i] = freqRel[i] / left_mean[i];
-		right_mean[i] = freqRel[i] / right_mean[i];
+		left_mean[i] = freqRel[i] / left_mean[i]; // left_mean[r_i] = #_triples_with_r_i / #_different_heads_in_r_i
+		right_mean[i] = freqRel[i] / right_mean[i]; // right_mean[r_i] = #_triples_with_r_i / #_different_tails_in_r_i
 	}
 }
 
