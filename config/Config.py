@@ -65,15 +65,12 @@ class Config(object):
             self.lib.setWorkThreads(self.workThreads)
             self.lib.randReset()
             self.lib.importTrainFiles()
+            self.update_batch_size_and_nbatches()
             self.relTotal = self.lib.getRelationTotal()
             self.entTotal = self.lib.getEntityTotal()
             self.trainTotal = self.lib.getTrainTotal()
             self.testTotal = self.lib.getTestTotal()
             self.validTotal = self.lib.getValidTotal()
-            if self.batch_size == None:
-                self.batch_size = self.lib.getTrainTotal() / self.nbatches
-            else:
-                self.nbatches = self.lib.getTrainTotal() / self.batch_size
             self.batch_seq_size = self.batch_size * (1 + self.negative_ent + self.negative_rel)
             self.batch_h = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
             self.batch_t = np.zeros(self.batch_size * (1 + self.negative_ent + self.negative_rel), dtype = np.int64)
@@ -174,12 +171,19 @@ class Config(object):
         self.train_times = times
 
     def set_nbatches(self, nbatches):
-        self.nbatches = nbatches
         self.batch_size = None
+        self.nbatches = nbatches
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
         self.nbatches = None
+
+    def update_batch_size_and_nbatches(self):
+        if self.batch_size == None:
+            self.batch_size = (self.lib.getTrainTotal() + self.nbatches - 1) / self.nbatches # trick to ceil division using floor division
+        elif self.batch_size > self.lib.getTrainTotal():
+            self.batch_size = self.lib.getTrainTotal()
+        self.nbatches = (self.lib.getTrainTotal() + self.batch_size - 1) / self.batch_size # trick to ceil division using floor division
 
     def set_margin(self, margin):
         self.margin = margin
