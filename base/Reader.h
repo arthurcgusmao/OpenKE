@@ -182,9 +182,9 @@ void importTestFiles() {
     fclose(f_kb2);
     fclose(f_kb3);
 
-    std::sort(tripleList, tripleList + tripleTotal, Triple::cmp_head);
-    std::sort(testList, testList + testTotal, Triple::cmp_rel2);
-    std::sort(validList, validList + validTotal, Triple::cmp_rel2);
+    std::sort(tripleList, tripleList + tripleTotal, Triple::cmp_head); // sorted by head entity (and then relation, and then tail)
+    std::sort(testList, testList + testTotal, Triple::cmp_rel2); // sorted by relation (and then head, and then tail)
+    std::sort(validList, validList + validTotal, Triple::cmp_rel2); // sorted by relation (and then head, and then tail)
     printf("The total of test triples is %ld.\n", testTotal);
     printf("The total of valid triples is %ld.\n", validTotal);
 
