@@ -42,7 +42,7 @@ void importTrainFiles() {
 	trainHead = (Triple *)calloc(trainTotal, sizeof(Triple));
 	trainTail = (Triple *)calloc(trainTotal, sizeof(Triple));
 	trainRel = (Triple *)calloc(trainTotal, sizeof(Triple));
-	freqRel = (INT *)calloc(relationTotal, sizeof(INT)); // freqRel[r_i] is the number of times the relation r_i was seen in trainList
+	freqRel = (INT *)calloc(relationTotal, sizeof(INT)); // freqRel[r_i] is the number of times the relation r_i was seen in trainList (this is correct)
 	freqEnt = (INT *)calloc(entityTotal, sizeof(INT));
 	for (INT i = 0; i < trainTotal; i++) {
 		tmp = fscanf(fin, "%ld", &trainList[i].h);
@@ -114,15 +114,15 @@ void importTrainFiles() {
 	lefRel[trainRel[0].h] = 0;
 	rigRel[trainRel[trainTotal - 1].h] = trainTotal - 1;
 
-	left_mean = (REAL *)calloc(relationTotal,sizeof(REAL));
-	right_mean = (REAL *)calloc(relationTotal,sizeof(REAL));
+	left_mean = (REAL *)calloc(relationTotal,sizeof(REAL)); // left_mean[r_i] corresponds to tail_per_head of r_i (tph[r_i])
+	right_mean = (REAL *)calloc(relationTotal,sizeof(REAL)); // right_mean[r_i] corresponds to head_per_tail of r_i (hpt[r_i])
 	for (INT i = 0; i < entityTotal; i++) {
-		for (INT j = lefHead[i] + 1; j < rigHead[i]; j++)
+		for (INT j = lefHead[i] + 1; j <= rigHead[i]; j++)
 			if (trainHead[j].r != trainHead[j - 1].r)
 				left_mean[trainHead[j].r] += 1.0;
 		if (lefHead[i] <= rigHead[i])
 			left_mean[trainHead[lefHead[i]].r] += 1.0;
-		for (INT j = lefTail[i] + 1; j < rigTail[i]; j++)
+		for (INT j = lefTail[i] + 1; j <= rigTail[i]; j++)
 			if (trainTail[j].r != trainTail[j - 1].r)
 				right_mean[trainTail[j].r] += 1.0;
 		if (lefTail[i] <= rigTail[i])

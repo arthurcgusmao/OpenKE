@@ -96,17 +96,12 @@ void* getBatch(void* con) {
 		batch_y[batch] = 1;
 		INT last = batchSize;
 		for (INT times = 0; times < negRate; times ++) {
-			if (bernFlag) // bernFlag signals that we should use the Bernoulli distribution for creating negative examples proposed by Wang et al. (2014).
-				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]); // this should be the probability of corrupting by replacing the tail (I have to verify the code yet)
+			if (bernFlag) { // bernFlag signals that we should use the Bernoulli distribution for creating negative examples proposed by Wang et al. (2014).
+				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]); // probability of corrupting by replacing the tail
 				// with the assumption above:
-				//  right_mean: should be the average number of head entities per tail entity, but I haven't understood the code below yet = hpt
-				//  left_mean: should be the average number of tail entities per head entity, but I haven't understood the code below yet = tph
-
-				//--------------------------------------
-				printf("\n\n*** Starting to print DEBUG ***\n\n");
-				printf("prob = %lf\n", prob);
-				printf("\n*** End of print DEBUG ***\n\n\n");
-				//--------------------------------------
+				//  right_mean: the average number of head entities per tail entity = hpt
+				//  left_mean: the average number of tail entities per head entity = tph
+			}
 			if (randd(id) % 1000 < prob) {
 				batch_h[batch + last] = trainList[i].h;
 				batch_t[batch + last] = corrupt_head(id, trainList[i].h, trainList[i].r);
