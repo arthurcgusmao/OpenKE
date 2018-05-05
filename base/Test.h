@@ -257,7 +257,7 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
             correct = 0;
             for (INT j = validLef[r]; j <= validRig[r]; j++) {
                 if (score_pos[j] < tmpThresh) correct ++;
-                if (score_neg[j] => tmpThresh) correct ++;
+                if (score_neg[j] >= tmpThresh) correct ++;
             }
             tmpAcc = 1.0 * correct / total;
             if (i == 0) {
