@@ -63,6 +63,9 @@ def parse_feature_matrices(train_fpath, test_fpath):
 
 
 def parse_feature_matrix(filepath):
+    """Returns four objects: three lists (of heads, tails and labels) and a sparse matrix (of
+    features) for the input (a path to a feature matrix file).
+    """
     heads = []
     tails = []
     labels = []
@@ -85,6 +88,10 @@ def parse_feature_matrix(filepath):
 
 
 def parse_matrices_for_relation(pra_results_dpath, relation_name):
+    """Takes as input the path to a directory where PRA code outputted its results (the feature
+    matrices) and the relation name for one of the relations in the problem. It returns lists of
+    heads, tails, labels and a sparse matrix of features for each data fold (train, valid and test).
+    """
     train_fpath = "{}/{}/train.tsv".format(pra_results_dpath, relation_name)
     valid_fpath = "{}/{}/valid.tsv".format(pra_results_dpath, relation_name)
     test_fpath = "{}/{}/test.tsv".format(pra_results_dpath, relation_name)
