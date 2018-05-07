@@ -280,6 +280,11 @@ class Config(object):
         for i in lists:
             self.set_parameters_by_name(i, lists[i])
 
+    def set_parameters_from_json(self, filepath):
+        with open(filepath) as f:
+            embed = json.load(f)
+            self.set_parameters(embed)
+
     def set_model(self, model, **kwargs):
         self.model = model
         self.graph = tf.Graph()
