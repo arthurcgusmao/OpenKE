@@ -247,6 +247,18 @@ def ensure_one_to_one_negative_examples(dataset_path):
         print('There is NOT a one-to-one relation between positive and negative examples.')
 
 
+def create_inputs_for_openke(dataset_path):
+    """This function calls other functions defined above in order to setup all input files needed
+    for OpenKE. It assumes that in `dataset_path` there are already three files (train.txt,
+    valid.txt, and test.txt) in the order (head, relation, tail) and that valid and test already
+    contain negative examples (labels).
+    """
+    generate_name2id_files(dataset_path, labels=['valid.txt', 'test.txt'])
+    generate_fold2id_files(dataset_path, labels=['valid.txt', 'test.txt'])
+    generate_type_constrain_file(dataset_path=dataset_path)
+    ensure_one_to_one_negative_examples(dataset_path)
+
+
 def get_bern_prob_corrupt_tail(type_constrain_dict):
     """Gets the probability of the tail be corrupted when generating negative examples using the
     Bernoulli distribution proposed by Wang et al. (2014).
