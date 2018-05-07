@@ -7,9 +7,8 @@ from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, chi2
 
-from feature_matrices import parse_feature_matrices
+from feature_matrices import parse_matrices_for_relation
 import dataset_tools
 
 
@@ -19,13 +18,13 @@ def get_target_relations(data_set_name):
         original_data_path = '../benchmarks/NELL186'
         corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_5to1.txt'
     elif data_set_name == 'FB13':
-        data_path = '../results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = '../benchmarks/FB13'
-        corrupted_data_path = '../benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
+        data_path = "/Users/Alvinho/openke/extract_feat__neg_by_random"  # '../results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
+        original_data_path = "/Users/Alvinho/Documents/benchmarks/FB13"  #  '../benchmarks/FB13'
+        corrupted_data_path = "/Users/Alvinho/Documents/benchmarks/FB13/corrupted/train2id_bern_2to1.txt"  #  '../benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
     elif data_set_name == 'WN11':
         data_path = '../results/WN11/TransE/1524623630/pra_explain/results/extract_feat__neg_by_random'
         original_data_path = '../benchmarks/WN11'
-        corrupted_data_path = '../benchmarks/WN11/corrupted/train2id_bern_2to1.txt'   
+        corrupted_data_path = '../benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
     elif data_set_name == 'g_hat_WN11':
         data_path = '../results/WN11/TransE/1524623630/pra_explain/results/results/g_hat_5nn_2negrate_bern'
         original_data_path = '../benchmarks/WN11'
@@ -34,10 +33,6 @@ def get_target_relations(data_set_name):
         data_path = '../results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
         original_data_path = '../benchmarks/NELL186'
         corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
-
-
-
-
     return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
 
 def get_reasons(row):
@@ -104,7 +99,7 @@ class Explanator(object):
         self.stats['# Triples Valid'] = true_valid[true_valid['rel_name']==target_relation].shape[0]
         true_test = pd.read_csv(os.path.join(original_data_path, 'test.txt'), sep='\t', skiprows=1, names=['head', 'rel_name', 'tail', 'true_label'])
         self.stats['# Triples Test'] = true_test[true_test['rel_name']==target_relation].shape[0]
-
+        # Put all the original data together
         true_data = pd.concat([true_train, true_valid, true_test])
 
         # Functions to recover entities and relations names
@@ -115,13 +110,6 @@ class Explanator(object):
             return id2entity[x]
 
         # # Add relations and entities names to dataset
-        # true_test['rel_name'] = true_test['rel'].apply(apply_id2relation)
-        # true_test['head'] = true_test['e1'].apply(apply_id2entity)
-        # true_test['tail'] = true_test['e2'].apply(apply_id2entity)
-        # # Validation data
-        # true_valid['rel_name'] = true_valid['rel'].apply(apply_id2relation)
-        # true_valid['head'] = true_valid['e1'].apply(apply_id2entity)
-        # true_valid['tail'] = true_valid['e2'].apply(apply_id2entity)
         # Training data
         true_train['rel_name'] = true_train['rel'].apply(apply_id2relation)
         self.stats['# Triples Train'] = true_train[true_train['rel_name']==target_relation].shape[0]
@@ -129,35 +117,36 @@ class Explanator(object):
         true_train['tail'] = true_train['e2'].apply(apply_id2entity)
 
         # Get target relation data
-        data_path = os.path.join(self.data_path, self.target_relation)
-        train_matrix_fpath = data_path + "/train.tsv"
-        validation_matrix_fpath = data_path + "/valid.tsv"
-        test_matrix_fpath = data_path + "/test.tsv"
-        # Check whether validation and test sets exist
-        if not os.path.isfile(test_matrix_fpath):
-            return False
-        else:
-            self.train_data, self.test_data = parse_feature_matrices(train_matrix_fpath, test_matrix_fpath)
-            if os.path.isfile(validation_matrix_fpath):
-                _, self.valid_data = parse_feature_matrices(train_matrix_fpath, validation_matrix_fpath)
-            else:
-                self.valid_data = pd.DataFrame(columns=['head', 'tail', 'true_label'])
+        # Get the parser for the feature matrices
+        parser = parse_matrices_for_relation(data_path, self.target_relation)
+
+        self.train_data = pd.DataFrame(columns=['head', 'tail', 'label'])
+        self.train_data['head'] = parser['train_heads']
+        self.train_data['tail'] = parser['train_tails']
+        self.train_data['label'] = parser['train_labels']
+
+        self.test_data = pd.DataFrame(columns=['head', 'tail', 'label'])
+        self.test_data['head'] = parser['test_heads']
+        self.test_data['tail'] = parser['test_tails']
+        self.test_data['label'] = parser['test_labels']
+
+        self.valid_data = pd.DataFrame(columns=['head', 'tail', 'label'])
+        self.valid_data['head'] = parser['valid_heads']
+        self.valid_data['tail'] = parser['valid_tails']
+        self.valid_data['label'] = parser['valid_labels']
+
         # Get true labels for target relations (training data)
         rel_true_train = true_train[true_train['rel_name']==self.target_relation].copy()
-        self.train_data = self.train_data.merge(rel_true_train[['head', 'tail', 'true_label']], how='left', on=['head', 'tail'])
+        self.train_data = self.train_data.merge(rel_true_train[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
         self.train_data = self.train_data.fillna(-1)
         # separate x (features) and y (labels) for training data
         self.train_y = self.train_data.pop('label')
         self.true_train_y = self.train_data.pop('true_label')
-        self.train_x = self.train_data.drop(['head', 'tail'], axis=1)
+        self.train_x = parser['train_X']
 
         # Save features names and number of features before pre-processing
-        self.columns = self.train_x.columns
-        self.stats['# Features'] = self.train_x.shape[1]
-        
-        # Define feature selection
-        k = min([1000, self.stats['# Features']])
-        self.sel = SelectKBest(chi2, k=k)
+        self.columns = parser['vectorizer'].get_feature_names()
+        self.stats['# Features'] = len(self.columns)
 
         # Get true labels for target relations (validation data)
         rel_true_valid = true_valid[true_valid['rel_name']==self.target_relation].copy()
@@ -165,23 +154,23 @@ class Explanator(object):
         if rel_true_valid.empty or self.valid_data.empty:
             self.valid_exists = False
         else:
-            self.valid_data = self.valid_data.merge(rel_true_valid[['head', 'tail', 'true_label']], how='left', on=['head', 'tail'])
+            self.valid_data = self.valid_data.merge(rel_true_valid[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
             self.valid_data = self.valid_data.fillna(-1)
             # Validation data
             self.valid_y = self.valid_data.pop('label')
             self.true_valid_y = self.valid_data.pop('true_label')
-            self.valid_x = self.valid_data.drop(['head', 'tail'], axis=1)
+            self.valid_x = parser['valid_X']
         # Get true labels for target relations (test data)
         rel_true_test = true_test[true_test['rel_name']==self.target_relation].copy()
         if rel_true_test.empty or self.test_data.empty:
             self.test_exists = False
         else:
-            self.test_data = self.test_data.merge(rel_true_test[['head', 'tail', 'true_label']], how='left', on=['head', 'tail'])
+            self.test_data = self.test_data.merge(rel_true_test[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
             self.test_data = self.test_data.fillna(-1)
             # Test data
             self.test_y = self.test_data.pop('label')
             self.true_test_y = self.test_data.pop('true_label')
-            self.test_x = self.test_data.drop(['head', 'tail'], axis=1)
+            self.test_x = parser['test_X']
 
         return True
 
@@ -190,33 +179,16 @@ class Explanator(object):
         """ Train and evaluate the model """
 
         # Search for the best parameters
-	try:
-        	training_examples = pd.concat([self.train_x, self.valid_x], axis=0)
-        	training_examples_y = pd.concat([self.train_y, self.valid_y], axis=0)
-	except:
-		training_examples = self.train_x
-        	training_examples_y = self.train_y
-        training_examples = self.sel.fit_transform(training_examples, training_examples_y)
-
-        self.train_x = self.sel.transform(self.train_x)
-        self.train_x = self.sel.inverse_transform(self.train_x)
-        self.train_x = pd.DataFrame(self.train_x, columns=self.columns)
-        self.train_x.loc[:, (self.train_x != 0).any(axis=0)]
-
-	if self.test_exists:
-	    self.test_x = self.sel.transform(self.test_x)
-	    self.test_x = self.sel.inverse_transform(self.test_x)
-	    self.test_x = pd.DataFrame(self.test_x, columns=self.columns)
-	    self.test_x.loc[:, (self.test_x != 0).any(axis=0)]
-	if self.valid_exists:
-	    self.valid_x = self.sel.transform(self.valid_x)
-	    self.valid_x = self.sel.inverse_transform(self.valid_x)
-	    self.valid_x = pd.DataFrame(self.valid_x, columns=self.columns)
-	    self.valid_x.loc[:, (self.valid_x != 0).any(axis=0)]
+    	try:
+            training_examples = np.concatenate((self.train_x, self.valid_x), axis=0)
+            training_examples_y = np.concatenate((self.train_y, self.valid_y), axis=0)
+    	except:
+            training_examples = self.train_x
+            training_examples_y = self.train_y
 
         try:
-            self.grid_search.fit(training_examples, pd.concat([self.train_y, self.valid_y]))
-            #self.grid_search.fit(self.train_x, self.train_y)
+            self.grid_search.fit(training_examples, training_examples_y)
+            #  self.grid_search.fit(self.train_x, self.train_y)
         except:
             print("Not possible to fit a logit for this relation because it contains a single class.")
             return False
@@ -230,7 +202,7 @@ class Explanator(object):
                       max_iter=100000, tol=1e-3, class_weight="balanced")
 
         self.model.fit(self.train_x, self.train_y)
-        
+
         ### Get evaluation metrics
         # Get accuracy
         if self.test_exists:
@@ -311,7 +283,7 @@ class Explanator(object):
 
         self.stats['Train Positive Ratio'] = self.train_y[self.train_y==1].shape[0]/self.train_y.shape[0]
         self.stats['True Train Positive Ratio'] = self.true_train_y[self.true_train_y==1].shape[0]/self.true_train_y.shape[0]
-        
+
         self.stats['Train Embedding Accuracy'] = self.train_y[self.train_y == self.true_train_y].shape[0]/self.train_y.shape[0]
         if self.test_exists:
             self.stats['Test Embedding Accuracy'] = self.test_y[self.test_y == self.true_test_y].shape[0]/self.test_y.shape[0]
@@ -438,8 +410,8 @@ if __name__ == '__main__':
                'Test F1_score', 'True Test F1_score', 'Valid F1_score', 'True Valid F1_score', 'Train F1_score', 'True Train F1_score',
                'l1_ratio', 'alpha'
               ]
-    
-    data_base_names = ['g_hat_NELL']
+
+    data_base_names = ['FB13']
     for data_base_name in data_base_names:
 
         data_path, original_data_path, corrupted_data_path, target_relations = get_target_relations(data_base_name)
@@ -447,7 +419,7 @@ if __name__ == '__main__':
 	# Export dataframe headers to csv
         complete_dataframe = pd.DataFrame(columns=columns)
         complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
-	target_relations.remove('concept:worksfor')
+        target_relations = ['nationality']
         for target_relation in target_relations:
             print("Training on " + target_relation + " relations")
             exp = Explanator(complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
@@ -464,4 +436,3 @@ if __name__ == '__main__':
                     exp.explain_per_example(data_path, 'test')
             else:
                 print("No test data for ", target_relation, " data")
-        
