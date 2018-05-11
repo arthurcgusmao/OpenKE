@@ -18,9 +18,12 @@ def get_target_relations(data_set_name):
         original_data_path = '../benchmarks/NELL186'
         corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_5to1.txt'
     elif data_set_name == 'FB13':
-        data_path = "/Users/Alvinho/openke/extract_feat__neg_by_random"  # '../results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = "/Users/Alvinho/Documents/benchmarks/FB13"  #  '../benchmarks/FB13'
-        corrupted_data_path = "/Users/Alvinho/Documents/benchmarks/FB13/corrupted/train2id_bern_2to1.txt"  #  '../benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
+        data_path = '../results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
+        # "/Users/Alvinho/openke/extract_feat__neg_by_random"
+        original_data_path = '../benchmarks/FB13'
+        #  "/Users/Alvinho/Documents/benchmarks/FB13"
+        corrupted_data_path = '../benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
+        # "/Users/Alvinho/Documents/benchmarks/FB13/corrupted/train2id_bern_2to1.txt"
     elif data_set_name == 'WN11':
         data_path = '../results/WN11/TransE/1524623630/pra_explain/results/extract_feat__neg_by_random'
         original_data_path = '../benchmarks/WN11'
@@ -35,13 +38,17 @@ def get_target_relations(data_set_name):
         corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
     return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
 
-def get_reasons(row):
+def get_reasons(row, n_examples=10):
+    # Remove zero elements
     reasons = row[row != 0]
+    # Select the top n_examples elements
+    top_reasons_abs = reasons.abs().nlargest(n=n_examples, keep='first')
+    # Create a pandas series with these
     output = pd.Series()
     counter = 1
-    for reason, relevance in reasons.iteritems():
+    for reason, _ in top_reasons_abs.iteritems():
         output['reason' + str(counter)] = reason
-        output['relevance' + str(counter)] = relevance
+        output['relevance' + str(counter)] = reasons[reason]
         counter = counter + 1
         if counter == 10:
             break
@@ -227,7 +234,7 @@ class Explanator(object):
         else:
             self.stats['Test Precision'] = -1
             self.stats['True Test Precision'] = -1
-        if self.valid_exists:
+        if False: #self.valid_exists:
             self.stats['Valid Precision'] = precision_score(self.valid_y, self.model.predict(self.valid_x))
             self.stats['True Valid Precision'] = precision_score(self.true_valid_y, self.model.predict(self.valid_x))
         else:
@@ -308,18 +315,27 @@ class Explanator(object):
             data = self.test_data
         else:
             return ''
-        final_reasons = pd.DataFrame()
-        final_reasons['head'] = data['head']
-        final_reasons['tail'] = data['tail']
-        repeated_coefficients = np.repeat(coefficients.T, x.shape[0], axis=0)
-        weighted_x = x.apply(pd.to_numeric)
-        explanations = weighted_x.mul(repeated_coefficients, axis=1)
-        motives = explanations.apply(get_reasons, axis=1)
-        final_reasons = pd.concat([final_reasons, motives], axis=1)
-        answers = self.model.predict_proba(x)[:, 1]
+        # Define the maximum number of examples
+        n_examples = 10
+        n_examples = min(n_examples, x.shape[0])
+        # Select n_examples samples
+        index = np.random.choice(x.shape[0], n_examples, replace=False)
+        features = x[index, :]
+        features = features.todense()
+        # Compute those that are relevant
+        repeated_coefficients = np.repeat(coefficients.T, n_examples, axis=0)
+        explanations = np.multiply(features, repeated_coefficients)
+        # Define a pandas DataFrame to hold the information
+        examples_df = pd.DataFrame(explanations, columns=self.columns)
+        examples_df.columns = self.columns
+
+        final_reasons = examples_df.apply(get_reasons, axis=1)
+        final_reasons['head'] = data.iloc[index]['head'].values
+        final_reasons['tail'] = data.iloc[index]['tail'].values
+        answers = self.model.predict_proba(features)[:, 1]
         final_reasons['y_logit'] = answers
         final_reasons['y_hat'] = y
-        final_reasons.to_csv(data_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv')
+        final_reasons.to_csv(data_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv', index=False)
         return final_reasons
 
     def explain(self):
@@ -328,7 +344,7 @@ class Explanator(object):
         self.coefficients = self.model.coef_.reshape(-1,1)
 
         self.explanation = pd.DataFrame(self.coefficients, columns=['scores'])
-        self.explanation['path'] = self.train_x.columns
+        self.explanation['path'] = self.columns
         self.explanation = self.explanation.sort_values(by="scores", ascending=False)
         explanation = self.explanation[self.explanation['scores'] != 0]
         self.most_relevant_variables = pd.concat([explanation.iloc[0:10], explanation.iloc[-10:-1]])
@@ -389,7 +405,7 @@ class Explanator(object):
             f.write("\n" + str(self.model.get_params()))
 
 if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
+    # parser = argparse.Argumentparser()
 
     # parser.add_argument(
     #     '--output', '-o',
