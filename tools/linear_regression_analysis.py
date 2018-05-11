@@ -435,7 +435,6 @@ if __name__ == '__main__':
 	# Export dataframe headers to csv
         complete_dataframe = pd.DataFrame(columns=columns)
         complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
-        target_relations = ['nationality']
         for target_relation in target_relations:
             print("Training on " + target_relation + " relations")
             exp = Explanator(complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
