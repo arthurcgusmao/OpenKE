@@ -38,16 +38,17 @@ def get_target_relations(data_set_name):
         corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
     return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
 
-def get_reasons(row, n_examples=10):
+def get_reasons(row):
     # Remove zero elements
     reasons = row[row != 0]
     # Select the top n_examples elements
-    top_reasons_abs = reasons.abs().nlargest(n=n_examples, keep='first')
+    top_reasons_abs = reasons.abs().nlargest(n=10, keep='first')
     # Create a pandas series with these
     output = pd.Series()
     counter = 1
     for reason, _ in top_reasons_abs.iteritems():
-        output['reason' + str(counter)] = reason
+        reason_name, _ = reason.split('=')
+        output['reason' + str(counter)] = reason_name
         output['relevance' + str(counter)] = reasons[reason]
         counter = counter + 1
         if counter == 10:
@@ -303,7 +304,7 @@ class Explanator(object):
         return True
 
 
-    def explain_per_example(self, data_path, data_type):
+    def explain_per_example(self, data_path, data_type, n_examples=10):
         coefficients = self.model.coef_.reshape(-1,1)
         if data_type == 'train':
             x = self.train_x
@@ -316,7 +317,6 @@ class Explanator(object):
         else:
             return ''
         # Define the maximum number of examples
-        n_examples = 10
         n_examples = min(n_examples, x.shape[0])
         # Select n_examples samples
         index = np.random.choice(x.shape[0], n_examples, replace=False)
