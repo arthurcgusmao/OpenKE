@@ -270,11 +270,11 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
         }
         relThresh[r] = bestThresh;
         // printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
-        printf("relation %li,\tbestCorrect:   %li,\tvalidLef[r]: %li,  \tvalidRig[r]: %li,\tinterval: %lf,\tn_interval: %li\tmin_score: %lf,\tmax_score: %lf\n", r, bestCorrect, validLef[r], validRig[r], interval, n_interval, min_score, max_score);
+        // printf("relation %li,\tbestCorrect:   %li,\tvalidLef[r]: %li,  \tvalidRig[r]: %li,\tinterval: %lf,\tn_interval: %li\tmin_score: %lf,\tmax_score: %lf\n", r, bestCorrect, validLef[r], validRig[r], interval, n_interval, min_score, max_score);
         correct_all_relations += bestCorrect;
     }
     validAcc = 1.0 * correct_all_relations / total_all_relations;
-    printf("correct_all_relations: %li\ntotal_all_relations: %li\n\n", correct_all_relations, total_all_relations);
+    // printf("correct_all_relations: %li\ntotal_all_relations: %li\n\n", correct_all_relations, total_all_relations);
     // printf("validation best accuracy is %lf\n", validAcc);
 }
 
