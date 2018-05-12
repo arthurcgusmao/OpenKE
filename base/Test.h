@@ -236,22 +236,20 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
     INT total_all_relations, correct_all_relations, bestCorrect;
     total_all_relations = 0;
     correct_all_relations = 0;
+    n_interval = 1000;
     for (INT r = 0; r < relationTotal; r++) {
         if (validLef[r] == -1) continue;
         total = (validRig[r] - validLef[r] + 1) * 2;
         total_all_relations += total;
         min_score = score_pos[validLef[r]];
-        if (score_neg[validLef[r]] < min_score) min_score = score_neg[validLef[r]];
         max_score = score_pos[validLef[r]];
-        if (score_neg[validLef[r]] > max_score) max_score = score_neg[validLef[r]];
-        for (INT i = validLef[r]+1; i <= validRig[r]; i++) {
+        for (INT i = validLef[r]; i <= validRig[r]; i++) {
             if(score_pos[i] < min_score) min_score = score_pos[i];
             if(score_pos[i] > max_score) max_score = score_pos[i];
             if(score_neg[i] < min_score) min_score = score_neg[i];
             if(score_neg[i] > max_score) max_score = score_neg[i];
         }
-        interval = (max_score - min_score)/1000; // defining the interval this way is more portable accross different kinds of models
-        n_interval = INT((max_score - min_score)/interval);
+        interval = (max_score - min_score)/n_interval; // defining the interval this way is more portable accross different kinds of models
         for (INT i = 0; i <= n_interval+1; i++) { // we should start the search BEFORE the min score and end it AFTER the max score, in case validation triples are all positive or negative.
             tmpThresh = min_score + i * interval;
             correct = 0;
@@ -272,9 +270,11 @@ void getBestThreshold(REAL *score_pos, REAL *score_neg) {
         }
         relThresh[r] = bestThresh;
         // printf("relation %ld: bestThresh is %lf, bestAcc is %lf, min/max scores are [%lf, %lf]\n", r, bestThresh, bestAcc, min_score, max_score);
+        printf("relation %li,\tbestCorrect:   %li,\tvalidLef[r]: %li,  \tvalidRig[r]: %li,\tinterval: %lf,\tn_interval: %li\tmin_score: %lf,\tmax_score: %lf\n", r, bestCorrect, validLef[r], validRig[r], interval, n_interval, min_score, max_score);
         correct_all_relations += bestCorrect;
     }
     validAcc = 1.0 * correct_all_relations / total_all_relations;
+    printf("correct_all_relations: %li\ntotal_all_relations: %li\n\n", correct_all_relations, total_all_relations);
     // printf("validation best accuracy is %lf\n", validAcc);
 }
 
