@@ -62,8 +62,8 @@ void testHead(REAL *con) {
     l_filter_reci_rank += 1.0/(l_filter_s+1);
     l_reci_rank += 1.0/(l_s+1);
     lastHead++;
-    printf("l_filter_s: %ld\n", l_filter_s);
-    printf("%f %f %f %f \n", l_tot / lastHead, l_filter_tot / lastHead, l_rank / lastHead, l_filter_rank / lastHead);
+    // printf("l_filter_s: %ld\n", l_filter_s);
+    // printf("%f %f %f %f \n", l_tot / lastHead, l_filter_tot / lastHead, l_rank / lastHead, l_filter_rank / lastHead);
 }
 
 extern "C"
@@ -97,17 +97,73 @@ void testTail(REAL *con) {
     r_filter_reci_rank += 1.0/(1+r_filter_s);
     r_reci_rank += 1.0/(1+r_s);
     lastTail++;
-    printf("r_filter_s: %ld\n", r_filter_s);
-    printf("%f %f %f %f\n", r_tot /lastTail, r_filter_tot /lastTail, r_rank /lastTail, r_filter_rank /lastTail);
+    // printf("r_filter_s: %ld\n", r_filter_s);
+    // printf("%f %f %f %f\n", r_tot /lastTail, r_filter_tot /lastTail, r_rank /lastTail, r_filter_rank /lastTail);
 }
 
+REAL mrr_raw;
+REAL mr_raw;
+REAL hits_10_raw;
+REAL hits_3_raw;
+REAL hits_1_raw;
+REAL mrr_filter;
+REAL mr_filter;
+REAL hits_10_filter;
+REAL hits_3_filter;
+REAL hits_1_filter;
 extern "C"
 void test_link_prediction() {
-    printf("overall results:\n");
-    printf("left %f %f %f %f %f \n", l_rank/ testTotal, l_reci_rank/ testTotal, l_tot / testTotal, l3_tot / testTotal, l1_tot / testTotal);
-    printf("left(filter) %f %f %f %f %f \n", l_filter_rank/ testTotal, l_filter_reci_rank/ testTotal, l_filter_tot / testTotal,  l3_filter_tot / testTotal,  l1_filter_tot / testTotal);
-    printf("right %f %f %f %f %f \n", r_rank/ testTotal, r_reci_rank/ testTotal, r_tot / testTotal,r3_tot / testTotal,r1_tot / testTotal);
-    printf("right(filter) %f %f %f %f %f\n", r_filter_rank/ testTotal, r_filter_reci_rank/ testTotal, r_filter_tot / testTotal,r3_filter_tot / testTotal,r1_filter_tot / testTotal);
+    l_rank /= testTotal;
+    r_rank /= testTotal;
+    l_reci_rank /= testTotal;
+    r_reci_rank /= testTotal;
+
+    l_tot /= testTotal;
+    l3_tot /= testTotal;
+    l1_tot /= testTotal;
+
+    r_tot /= testTotal;
+    r3_tot /= testTotal;
+    r1_tot /= testTotal;
+
+    // with filter
+    l_filter_rank /= testTotal;
+    r_filter_rank /= testTotal;
+    l_filter_reci_rank /= testTotal;
+    r_filter_reci_rank /= testTotal;
+
+    l_filter_tot /= testTotal;
+    l3_filter_tot /= testTotal;
+    l1_filter_tot /= testTotal;
+
+    r_filter_tot /= testTotal;
+    r3_filter_tot /= testTotal;
+    r1_filter_tot /= testTotal;
+
+    // calculating final metrics (by @acg)
+    mrr_raw = (l_reci_rank+r_reci_rank)/2;
+    mr_raw = (l_rank+r_rank)/2;
+    hits_10_raw = (l_tot+r_tot)/2;
+    hits_3_raw = (l3_tot+r3_tot)/2;
+    hits_1_raw = (l1_tot+r1_tot)/2;
+    mrr_filter = (l_filter_reci_rank+r_filter_reci_rank)/2;
+    mr_filter = (l_filter_rank+r_filter_rank)/2;
+    hits_10_filter = (l_filter_tot+r_filter_tot)/2;
+    hits_3_filter = (l3_filter_tot+r3_filter_tot)/2;
+    hits_1_filter = (l1_filter_tot+r1_filter_tot)/2;
+
+    printf("Overall results:\n");
+
+    printf("metric:\t\t\t MRR \t\t MR \t\t hit@10 \t hit@3  \t hit@1 \n");
+    printf("l(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", l_reci_rank, l_rank, l_tot, l3_tot, l1_tot);
+    printf("r(raw):\t\t\t %f \t %f \t %f \t %f \t %f \n", r_reci_rank, r_rank, r_tot, r3_tot, r1_tot);
+    printf("averaged(raw):\t\t %f \t %f \t %f \t %f \t %f \n",
+            (l_reci_rank+r_reci_rank)/2, (l_rank+r_rank)/2, (l_tot+r_tot)/2, (l3_tot+r3_tot)/2, (l1_tot+r1_tot)/2);
+    printf("\n");
+    printf("l(filter):\t\t %f \t %f \t %f \t %f \t %f \n", l_filter_reci_rank, l_filter_rank, l_filter_tot, l3_filter_tot, l1_filter_tot);
+    printf("r(filter):\t\t %f \t %f \t %f \t %f \t %f \n", r_filter_reci_rank, r_filter_rank, r_filter_tot, r3_filter_tot, r1_filter_tot);
+    printf("averaged(filter):\t %f \t %f \t %f \t %f \t %f \n",
+            (l_filter_reci_rank+r_filter_reci_rank)/2, (l_filter_rank+r_filter_rank)/2, (l_filter_tot+r_filter_tot)/2, (l3_filter_tot+r3_filter_tot)/2, (l1_filter_tot+r1_filter_tot)/2);
 }
 
 /*=====================================================================================
