@@ -1,42 +1,45 @@
 from __future__ import division
 import argparse
-import pandas as pd
+import itertools
+import multiprocessing
 import numpy as np
 import os
+import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
+import time
 
+import config, models
 from feature_matrices import parse_matrices_for_relation
 import dataset_tools
 
 
 def get_target_relations(data_set_name):
     if data_set_name == 'NELL':
-        data_path = '../results/NELL186/TransE/1524632595/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = '../benchmarks/NELL186'
-        corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_5to1.txt'
+        data_path = './results/NELL186/TransE/1524632595/pra_explain/results/extract_feat__neg_by_random'
+        original_data_path = './benchmarks/NELL186'
+        corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_5to1.txt'
     elif data_set_name == 'FB13':
-        data_path = '../results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
-        # "/Users/Alvinho/openke/extract_feat__neg_by_random"
-        original_data_path = '../benchmarks/FB13'
-        #  "/Users/Alvinho/Documents/benchmarks/FB13"
-        corrupted_data_path = '../benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
-        # "/Users/Alvinho/Documents/benchmarks/FB13/corrupted/train2id_bern_2to1.txt"
+        data_path = './results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
+        original_data_path = './benchmarks/FB13'
+        corrupted_data_path = './benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
     elif data_set_name == 'WN11':
-        data_path = '../results/WN11/TransE/1524623630/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = '../benchmarks/WN11'
-        corrupted_data_path = '../benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
+        data_path = './results/WN11/TransE/1524623630/pra_explain/results/extract_feat__neg_by_random'
+        original_data_path = './benchmarks/WN11'
+        corrupted_data_path = './benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
     elif data_set_name == 'g_hat_WN11':
-        data_path = '../results/WN11/TransE/1524623630/pra_explain/results/results/g_hat_5nn_2negrate_bern'
-        original_data_path = '../benchmarks/WN11'
-        corrupted_data_path = '../benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
+        data_path = './results/WN11/TransE/1524623630/pra_explain/results/results/g_hat_5nn_2negrate_bern'
+        original_data_path = './benchmarks/WN11'
+        corrupted_data_path = './benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
     elif data_set_name == 'g_hat_NELL':
-        data_path = '../results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
-        original_data_path = '../benchmarks/NELL186'
-        corrupted_data_path = '../benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
+        data_path = './results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
+        original_data_path = './benchmarks/NELL186'
+        corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
     return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
+
 
 def get_reasons(row):
     # Remove zero elements
@@ -59,8 +62,40 @@ def get_reasons(row):
     return output
 
 
+def import_embeddings(dataset_name, embedding_model=models.TransE):
+    if dataset_name == "NELL186":
+        model_timestamp = 1524632595
+    elif dataset_name == "FB13":
+        model_timestamp = 1524490825
+    import_path = './results/{}/{}/{}/'.format(
+        dataset_name,
+        embedding_model.__name__,
+        model_timestamp
+    )
+    g_hat_path = import_path + '/g_hat/'
+    model_info_df = pd.read_csv('{}model_info.tsv'.format(import_path), sep='\t')
+    # transform model info into dict with only one "row"
+    model_info = model_info_df.to_dict()
+    for key, d in model_info.iteritems():
+        model_info[key] = d[0]
+    # Load the embeddings
+    con = config.Config()
+    dataset_path = "./benchmarks/{}/".format(model_info['dataset_name'])
+    con.set_in_path(dataset_path)
+    con.set_test_link_prediction(False)
+    con.set_test_triple_classification(True)
+    con.set_work_threads(multiprocessing.cpu_count())
+    con.set_dimension(int(model_info['k']))
+    con.score_norm = model_info['score_norm']
+    con.init()
+    con.set_model(embedding_model)
+    con.import_variables("{}tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
+
+    return con.get_parameters()
+
+
 class Explanator(object):
-    def __init__(self, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path):
+    def __init__(self, dataset_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path, knn=True):
         self.complete_dataframe = complete_dataframe
         self.target_relation = target_relation
         self.data_path = data_path
@@ -78,13 +113,19 @@ class Explanator(object):
              'alpha': [0.01, 0.001, 0.0001]}
         ]
 
-        model_definition = SGDClassifier(loss="log",
+        self.model_definition = SGDClassifier(loss="log",
                                          penalty="elasticnet",
                                          max_iter=100000,
                                          tol=1e-3,
                                          class_weight="balanced",
 					                     n_jobs=4)
-        self.grid_search = GridSearchCV(model_definition, param_grid, n_jobs=4)
+        self.grid_search = GridSearchCV(self.model_definition, param_grid, n_jobs=4)
+
+        #Define the KNN model
+        if knn:
+            max_knn_k = 100
+            self.embed_params = import_embeddings(dataset_name)
+            self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=8).fit(self.embed_params['ent_embeddings'])
 
 
     def append_to_dataframe(self):
@@ -99,8 +140,8 @@ class Explanator(object):
         """ Extract data for the target relation from both the original and corrupted datasets """
         # Get original data
         original_data_path = self.original_data_path
-        entity2id, id2entity = dataset_tools.read_name2id_file(os.path.join(original_data_path,'entity2id.txt'))
-        relation2id, id2relation = dataset_tools.read_name2id_file(os.path.join(original_data_path, 'relation2id.txt'))
+        self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(original_data_path,'entity2id.txt'))
+        self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(original_data_path, 'relation2id.txt'))
 
         true_train = pd.read_csv(self.corrupted_data_path, sep=' ', skiprows=1, names=['e1', 'e2', 'rel', 'true_label'])
         true_valid = pd.read_csv(os.path.join(original_data_path, 'valid.txt'), sep='\t', skiprows=1, names=['head', 'rel_name', 'tail', 'true_label'])
@@ -112,12 +153,12 @@ class Explanator(object):
 
         # Functions to recover entities and relations names
         def apply_id2relation(x):
-            return id2relation[x]
+            return self.id2relation[x]
 
         def apply_id2entity(x):
-            return id2entity[x]
+            return self.id2entity[x]
 
-        # # Add relations and entities names to dataset
+        # Add relations and entities names to dataset
         # Training data
         true_train['rel_name'] = true_train['rel'].apply(apply_id2relation)
         self.stats['# Triples Train'] = true_train[true_train['rel_name']==target_relation].shape[0]
@@ -182,6 +223,30 @@ class Explanator(object):
 
         return True
 
+    def train_local(self, head, tail):
+        """ Train and evaluate the model locally """
+        # Get the nearest neighbors
+        _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
+        _, tail_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[tail]].reshape(1, -1))
+        # Get all the corresponding training examples
+        examples_indices = []
+        for head_index in head_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
+        for tail_index in tail_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
+        examples_indices = sorted(examples_indices)
+        # Train a logit on those examples
+        print "Training with ", len(examples_indices)
+        x = self.train_x[examples_indices, :]
+        y = self.train_y.iloc[examples_indices]
+        self.model_definition.fit(x, y)
+        # Get the features of the test example
+        test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
+        print "INDEX ", test_index
+        test_x = self.test_x[test_index, :]
+        test_y = self.test_y.iloc[test_index]
+        prediction = self.model_definition.predict_proba(test_x)[:, 1]
+        print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
     def train(self):
         """ Train and evaluate the model """
@@ -197,9 +262,9 @@ class Explanator(object):
         try:
             self.grid_search.fit(training_examples, training_examples_y)
             #  self.grid_search.fit(self.train_x, self.train_y)
-        except:
+        except ValueError:
             print("Not possible to fit a logit for this relation because it contains a single class.")
-            return False
+
         alpha = self.grid_search.best_params_['alpha']
         self.stats['alpha'] = alpha
         l1_ratio = self.grid_search.best_params_['l1_ratio']
@@ -301,18 +366,18 @@ class Explanator(object):
             self.stats['Valid Embedding Accuracy'] = self.valid_y[self.valid_y == self.true_valid_y].shape[0]/self.valid_y.shape[0]
         else:
             self.stats['Valid Embedding Accuracy'] = -1
-        return True
-
 
     def explain_per_example(self, data_path, data_type, n_examples=10):
         coefficients = self.model.coef_.reshape(-1,1)
         if data_type == 'train':
             x = self.train_x
-            y = self.train_y
+            y_hat = self.train_y
+            y = self.true_train_y
             data = self.train_data
         elif self.test_exists:
             x = self.test_x
-            y = self.test_y
+            y_hat = self.test_y
+            y = self.true_test_y
             data = self.test_data
         else:
             return ''
@@ -334,7 +399,8 @@ class Explanator(object):
         final_reasons['tail'] = data.iloc[index]['tail'].values
         answers = self.model.predict_proba(features)[:, 1]
         final_reasons['y_logit'] = answers
-        final_reasons['y_hat'] = y
+        final_reasons['y_hat'] = y_hat
+        final_reasons['y'] = y
         final_reasons.to_csv(data_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv', index=False)
         return final_reasons
 
@@ -435,19 +501,21 @@ if __name__ == '__main__':
 	# Export dataframe headers to csv
         complete_dataframe = pd.DataFrame(columns=columns)
         complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
+        target_relations = ['nationality']
         for target_relation in target_relations:
             print("Training on " + target_relation + " relations")
-            exp = Explanator(complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
+            exp = Explanator(data_base_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
             if exp.extract_data():
-                if exp.train():
-                    print('    Generating explanation')
-                    exp.explain()
-                    print('    Generating report')
-                    exp.report()
-                    print('    Saving to csv')
-                    exp.append_to_dataframe()
-                    exp.export_dataframe(data_path + data_base_name + '.csv')
-                    print('    Generating per-example explanations')
-                    exp.explain_per_example(data_path, 'test')
+                exp.train_local("john_forsyth", "roman_empire")
+                # exp.train():
+                # print('    Generating explanation')
+                # exp.explain()
+                # print('    Generating report')
+                # exp.report()
+                # print('    Saving to csv')
+                # exp.append_to_dataframe()
+                # exp.export_dataframe(data_path + data_base_name + '.csv')
+                # print('    Generating per-example explanations')
+                # exp.explain_per_example(data_path, 'test')
             else:
                 print("No test data for ", target_relation, " data")
