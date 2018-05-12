@@ -352,7 +352,7 @@ class Config(object):
                                                                'batch_loss': batch_loss,
                                                                'valid_acc': valid_acc})
                             if self.log_print:
-                                print "Epoch: {:4d},\tBatch: {:3d},\tEpoch Loss: {:9.3f},\tBatch Loss: {:7.3f}\tValid Acc: {:0.3f}".format(epoch, batch, epoch_loss, batch_loss, valid_acc)
+                                print "Epoch: {:4d},\tBatch: {:3d},\tEpoch Loss: {:9.3f},\tBatch Loss: {:7.3f}\tValid Acc: {:0.4f}".format(epoch, batch, epoch_loss, batch_loss, valid_acc)
                     # printing and logging info
                     if self.log_on == 1 and self.log_type == 'epoch':
                         valid_acc = self.validation_acc()
@@ -360,7 +360,7 @@ class Config(object):
                                                            'epoch_loss': epoch_loss,
                                                            'valid_acc': valid_acc})
                         if self.log_print:
-                            print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.3f}".format(epoch, epoch_loss, valid_acc)
+                            print "Epoch: {:4d},\tEpoch Loss: {:9.3f},\tValid Acc: {:0.4f}".format(epoch, epoch_loss, valid_acc)
                     if self.exportName != None and (self.export_steps!=0 and epoch % self.export_steps == 0):
                         self.save_tensorflow()
                 self.log['learning_time'] = time.time() - start_time
