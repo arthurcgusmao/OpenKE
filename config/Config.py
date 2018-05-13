@@ -376,6 +376,7 @@ class Config(object):
                     self.restore_tensorflow()
                 if self.test_link_prediction:
                     total = self.lib.getTestTotal()
+                    if self.log_on: tmp = -1
                     for times in range(total):
                         self.lib.getHeadBatch(self.test_h_addr, self.test_t_addr, self.test_r_addr)
                         res = self.test_step(self.test_h, self.test_t, self.test_r)
@@ -385,8 +386,12 @@ class Config(object):
                         res = self.test_step(self.test_h, self.test_t, self.test_r)
                         self.lib.testTail(res.__array_interface__['data'][0])
                         if self.log_on:
-                            print times
+                            if times*10 / total > tmp:
+                                print("Testing link prediction: {:2d}% ...".format(times*100 / total))
+                                tmp = times*10 / total
                     self.lib.test_link_prediction()
+                    if self.log_on:
+                        print("Testing link prediction: 100% Done.".format(times*100 / total))
                 if self.test_triple_classification:
                     self.calculate_thresholds()
                     self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)
