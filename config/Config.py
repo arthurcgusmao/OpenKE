@@ -387,11 +387,11 @@ class Config(object):
                         self.lib.testTail(res.__array_interface__['data'][0])
                         if self.log_on:
                             if times*10 / total > tmp:
-                                print("Testing link prediction: {:2d}% ...".format(times*100 / total))
+                                print("Testing link prediction: {:3d}% ...".format(times*100 / total))
                                 tmp = times*10 / total
-                    self.lib.test_link_prediction()
                     if self.log_on:
-                        print("Testing link prediction: 100% Done.".format(times*100 / total))
+                        print("Testing link prediction: 100% Done.\n".format(times*100 / total))
+                    self.lib.test_link_prediction()
                 if self.test_triple_classification:
                     self.calculate_thresholds()
                     self.lib.getTestBatch(self.test_pos_h_addr, self.test_pos_t_addr, self.test_pos_r_addr, self.test_neg_h_addr, self.test_neg_t_addr, self.test_neg_r_addr)

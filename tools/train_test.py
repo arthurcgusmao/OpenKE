@@ -174,10 +174,6 @@ def pipeline(model_info):
     print "\n--- TESTING ---\n"
     con.test()
 
-    if model_info['test_triple_class']: # triple classification
-        model_info['acc'] = c_float.in_dll(con.lib, 'aveAcc').value
-        print "TRIPLE CLASSIFICATION\nAccuracy in test set: {}\n".format(model_info['acc'])
-
     if model_info['test_link_prediction']: # link prediction
         model_info['mrr_raw'] = c_float.in_dll(con.lib, 'mrr_raw').value
         model_info['mr_raw'] = c_float.in_dll(con.lib, 'mr_raw').value
@@ -189,7 +185,10 @@ def pipeline(model_info):
         model_info['hits_10_filter'] = c_float.in_dll(con.lib, 'hits_10_filter').value
         model_info['hits_3_filter'] = c_float.in_dll(con.lib, 'hits_3_filter').value
         model_info['hits_1_filter'] = c_float.in_dll(con.lib, 'hits_1_filter').value
-        print "LINK PREDICTION\n"
+
+    if model_info['test_triple_class']: # triple classification
+        model_info['acc'] = c_float.in_dll(con.lib, 'aveAcc').value
+        print "\nAccuracy in test set is {}\n".format(model_info['acc'])
 
 
     # Save model info
