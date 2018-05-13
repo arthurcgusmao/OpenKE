@@ -6,7 +6,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import SGDClassifier, LogisticRegressionCV
+from sklearn.linear_model import SGDClassifier, LogisticRegressionCV, LinearRegression
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
@@ -91,11 +91,11 @@ def import_embeddings(dataset_name, embedding_model=models.TransE):
     con.set_model(embedding_model)
     con.import_variables("{}tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
 
-    return con.get_parameters()
+    return con
 
 
 class Explanator(object):
-    def __init__(self, dataset_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path, knn=True):
+    def __init__(self, dataset_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path, model_name="TransE", knn=True):
         self.complete_dataframe = complete_dataframe
         self.target_relation = target_relation
         self.data_path = data_path
@@ -121,10 +121,13 @@ class Explanator(object):
 					                     n_jobs=4)
         self.grid_search = GridSearchCV(self.model_definition, param_grid, n_jobs=4)
 
+        # Get the embedding model
+        self.emb_model = import_embeddings(dataset_name, getattr(models, model_name))
+
         #Define the KNN model
         if knn:
             max_knn_k = 100
-            self.embed_params = import_embeddings(dataset_name)
+            self.embed_params = self.emb_model.get_parameters()
             self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=8).fit(self.embed_params['ent_embeddings'])
 
 
@@ -223,7 +226,7 @@ class Explanator(object):
 
         return True
 
-    def train_local(self, head, tail):
+    def train_local_logit(self, head, tail):
         """ Train and evaluate the model locally """
         # Get the nearest neighbors
         _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
@@ -246,6 +249,42 @@ class Explanator(object):
         test_x = self.test_x[test_index, :]
         test_y = self.test_y.iloc[test_index]
         prediction = self.model_definition.predict_proba(test_x)[:, 1]
+        print "The triple has been predicted as ", prediction, " when should have been ", test_y
+
+    def train_local_regression(self, head, tail):
+        """ Train and evaluate the model locally """
+        # Get the nearest neighbors
+        _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
+        _, tail_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[tail]].reshape(1, -1))
+        # Get all the corresponding training examples
+        examples_indices = []
+        for head_index in head_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
+        for tail_index in tail_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
+
+        # Train a logit on those examples
+        print "Training with ", len(examples_indices)
+        x = self.train_x[examples_indices, :]
+        x_info = self.train_data.iloc[examples_indices]
+
+        def get_embed_y(row):
+            # Get head, tail and rel IDs
+            head = [self.entity2id[row['head']]]
+            tail = [self.entity2id[row['tail']]]
+            rel = [self.relation2id[self.target_relation]]
+            predict = self.emb_model.test_step(head, tail, rel)
+            return predict
+
+        y = x_info.apply(get_embed_y, axis=1)
+
+        self.regression_model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
+        self.regression_model.fit(x, y)
+        # Get the features of the test example
+        test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
+        test_x = self.test_x[test_index, :]
+        test_y = self.test_data.iloc[test_index].apply(get_embed_y, axis=1)
+        prediction = self.regression_model.predict(test_x)[:, 1]
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
     def train(self):
@@ -506,7 +545,7 @@ if __name__ == '__main__':
             print("Training on " + target_relation + " relations")
             exp = Explanator(data_base_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
             if exp.extract_data():
-                exp.train_local("john_forsyth", "roman_empire")
+                exp.train_local_regression("john_forsyth", "roman_empire")
                 # exp.train():
                 # print('    Generating explanation')
                 # exp.explain()
