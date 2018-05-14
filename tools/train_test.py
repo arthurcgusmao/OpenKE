@@ -215,6 +215,7 @@ def grid_search(param_grid):
                 grid[key] = [val]
 
     # run the pipeline for each model configuration
+    g = 1
     for grid in param_grid:
         models = list(product(*grid.values()))
         params_names = grid.keys()
@@ -223,8 +224,9 @@ def grid_search(param_grid):
             model_info = {}
             for i in range(len(params_names)):
                 model_info[params_names[i]] = model[i]
-            print "\n /##########################################################\\"
-            print   "< ###################  Grid Search {:2d}/{:<2d} ################### >".format(c, len(models))
-            print   " \##########################################################/\n"
+            print "\n /################################################################\\"
+            print   "< ###################  Grid {}/{} | Search {:2d}/{:<2d} ################### >".format(g, len(param_grid), c, len(models))
+            print   " \################################################################/\n"
             pipeline(model_info)
             c += 1
+        g += 1

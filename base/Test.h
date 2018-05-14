@@ -12,6 +12,12 @@ INT lastHead = 0;
 INT lastTail = 0;
 REAL l1_filter_tot = 0, l1_tot = 0, r1_tot = 0, r1_filter_tot = 0, l_tot = 0, r_tot = 0, l_filter_rank = 0, l_rank = 0, l_filter_reci_rank = 0, l_reci_rank = 0;
 REAL l3_filter_tot = 0, l3_tot = 0, r3_tot = 0, r3_filter_tot = 0, l_filter_tot = 0, r_filter_tot = 0, r_filter_rank = 0, r_rank = 0, r_filter_reci_rank = 0, r_reci_rank = 0;
+extern "C"
+void initTestLinkPrediction() {
+    lastHead = 0; lastTail = 0;
+    l1_filter_tot = 0; l1_tot = 0; r1_tot = 0; r1_filter_tot = 0; l_tot = 0; r_tot = 0; l_filter_rank = 0; l_rank = 0; l_filter_reci_rank = 0; l_reci_rank = 0;
+    l3_filter_tot = 0; l3_tot = 0; r3_tot = 0; r3_filter_tot = 0; l_filter_tot = 0; r_filter_tot = 0; r_filter_rank = 0; r_rank = 0; r_filter_reci_rank = 0; r_reci_rank = 0;
+}
 
 extern "C"
 void getHeadBatch(INT *ph, INT *pt, INT *pr) {

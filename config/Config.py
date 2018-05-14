@@ -375,6 +375,7 @@ class Config(object):
                 if self.importName != None:
                     self.restore_tensorflow()
                 if self.test_link_prediction:
+                    self.lib.initTestLinkPrediction()
                     total = self.lib.getTestTotal()
                     if self.log_on: tmp = -1
                     for times in range(total):
@@ -457,10 +458,10 @@ class Config(object):
         self.classify_classes = tf.less(self.classify_scores, thresholds)
 
 
-    def classify(self, heads, tails, rels, batch_size=10000):
+    def classify(self, heads, tails, rels, batch_size=10000, update_thres=False):
         """Runs the graph created by classify setup.
         """
-        if self.classify_classes == None:
+        if (self.classify_classes == None) or (update_thres):
             self.setup_classify_graph(rels)
 
         if len(rels) % batch_size == 0:
