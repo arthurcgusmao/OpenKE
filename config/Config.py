@@ -297,7 +297,7 @@ class Config(object):
                     if self.optimizer != None:
                         pass
                     elif self.opt_method == "Adagrad" or self.opt_method == "adagrad":
-                        self.optimizer = tf.train.AdagradOptimizer(self.alpha)
+                        self.optimizer = tf.train.AdagradOptimizer(learning_rate = self.alpha, initial_accumulator_value=1e-20)
                     elif self.opt_method == "Adadelta" or self.opt_method == "adadelta":
                         self.optimizer = tf.train.AdadeltaOptimizer(self.alpha)
                     elif self.opt_method == "Adam" or self.opt_method == "adam":
