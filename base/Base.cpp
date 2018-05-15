@@ -112,10 +112,12 @@ void* getBatch(void* con) {
 			}
 			if (corruptHeadFlag) {
 				batch_h[batch + last] = trainList[i].h;
-				batch_t[batch + last] = corrupt_head(id, trainList[i].h, trainList[i].r);
+				// batch_t[batch + last] = corrupt_head(id, trainList[i].h, trainList[i].r);
+				batch_t[batch + last] = rand_max(id, entityTotal - 1);
 				batch_r[batch + last] = trainList[i].r;
 			} else {
-				batch_h[batch + last] = corrupt_tail(id, trainList[i].t, trainList[i].r);;
+				// batch_h[batch + last] = corrupt_tail(id, trainList[i].t, trainList[i].r);;
+				batch_h[batch + last] = rand_max(id, entityTotal - 1);
 				batch_t[batch + last] = trainList[i].t;
 				batch_r[batch + last] = trainList[i].r;
 			}
@@ -125,7 +127,8 @@ void* getBatch(void* con) {
 		for (INT times = 0; times < negRelRate; times++) {
 			batch_h[batch + last] = trainList[i].h;
 			batch_t[batch + last] = trainList[i].t;
-			batch_r[batch + last] = corrupt_rel(id, trainList[i].h, trainList[i].t);
+			// batch_r[batch + last] = corrupt_rel(id, trainList[i].h, trainList[i].t);
+			batch_r[batch + last] = rand_max(id, relationTotal - 1);
 			batch_y[batch + last] = -1;
 			last += batchSize;
 		}

@@ -8,22 +8,22 @@ INT corrupt_head(INT id, INT h, INT r) {
 	INT lef, rig, mid, ll, rr;
 	lef = lefHead[h] - 1;
 	rig = rigHead[h];
-    // makes a binary search
+    // makes a binary search to find the first triple of the form (h, r, _)
 	while (lef + 1 < rig) {
 		mid = (lef + rig) >> 1; // shifts one bit of the number to the right (the same as dividing by two lol)
 		if (trainHead[mid].r >= r) rig = mid; else
 		lef = mid;
 	}
-	ll = rig;
+	ll = rig; // index of the first triple of the form (h, r, _)
 
 	lef = lefHead[h];
 	rig = rigHead[h] + 1;
-	while (lef + 1 < rig) {
+	while (lef + 1 < rig) { // again, binary search to find the last triple of the form(h, r, _)
 		mid = (lef + rig) >> 1;
 		if (trainHead[mid].r <= r) lef = mid; else
 		rig = mid;
 	}
-	rr = lef;
+	rr = lef; // index of the last triple of the form (h, r, _)
 
 	INT tmp = rand_max(id, entityTotal - (rr - ll + 1));
 	if (tmp < trainHead[ll].t) return tmp;
