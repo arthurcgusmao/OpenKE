@@ -79,6 +79,7 @@ void* getBatch(void* con) {
 	}
 	REAL prob = 500;
 	INT i;
+	INT corruptHeadFlag;
 	if (shuffleFlag) {
 		INT start_range = lef + (batchSize * shuffled_trainList_iter);
 		INT end_range = rig + (batchSize * shuffled_trainList_iter);
@@ -98,11 +99,18 @@ void* getBatch(void* con) {
 		for (INT times = 0; times < negRate; times ++) {
 			if (bernFlag) { // bernFlag signals that we should use the Bernoulli distribution for creating negative examples proposed by Wang et al. (2014).
 				prob = 1000 * right_mean[trainList[i].r] / (right_mean[trainList[i].r] + left_mean[trainList[i].r]); // probability of corrupting by replacing the tail
+				corruptHeadFlag = randd(id) % 1000 < prob;
 				// with the assumption above:
 				//  right_mean: the average number of head entities per tail entity = hpt
 				//  left_mean: the average number of tail entities per head entity = tph
+			} else {
+				if ((times == negRate - 1) && (negRate % 2 != 0)) { // if we're in the last corrupted triple and negRate is not divisible by 2
+					corruptHeadFlag = randd(id) % 1000 < 500; // corrupt head with 50% probability
+				} else {
+					corruptHeadFlag = (times % 2) ? 1 : 0; // corrupt head in even times and tail in odd times, to ensure correputed entities are always balanced
+				}
 			}
-			if (randd(id) % 1000 < prob) {
+			if (corruptHeadFlag) {
 				batch_h[batch + last] = trainList[i].h;
 				batch_t[batch + last] = corrupt_head(id, trainList[i].h, trainList[i].r);
 				batch_r[batch + last] = trainList[i].r;
