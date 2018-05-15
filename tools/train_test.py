@@ -198,6 +198,9 @@ def pipeline(model_info):
         model_info['acc'] = c_float.in_dll(con.lib, 'aveAcc').value
         print "\nAccuracy in test set is {}\n".format(model_info['acc'])
 
+    model_info['testing_time'] = con.log['testing_time']
+    print('Model was tested in {} seconds'.format(model_info['testing_time']))
+
 
     # Save model info
     # ---------------

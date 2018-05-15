@@ -374,6 +374,7 @@ class Config(object):
             with self.sess.as_default():
                 if self.importName != None:
                     self.restore_tensorflow()
+                start_time = time.time()
                 if self.test_link_prediction:
                     self.lib.initTestLinkPrediction()
                     total = self.lib.getTestTotal()
@@ -399,6 +400,7 @@ class Config(object):
                     res_pos = self.test_step(self.test_pos_h, self.test_pos_t, self.test_pos_r)
                     res_neg = self.test_step(self.test_neg_h, self.test_neg_t, self.test_neg_r)
                     self.lib.test_triple_classification(res_pos.__array_interface__['data'][0], res_neg.__array_interface__['data'][0])
+                self.log['testing_time'] = time.time() - start_time
 
 
     def calculate_thresholds(self):
