@@ -311,6 +311,9 @@ class Config(object):
                 self.saver = tf.train.Saver()
                 self.sess.run(tf.global_variables_initializer())
 
+    def set_model_by_name(self, model_name):
+        self.set_model(getattr(models, model_info['model_name']))
+
     def train_step(self, batch_h, batch_t, batch_r, batch_y):
         feed_dict = {
             self.trainModel.batch_h: batch_h,

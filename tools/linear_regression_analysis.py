@@ -13,39 +13,16 @@ from sklearn.model_selection import GridSearchCV
 import time
 
 import config, models
-from feature_matrices import parse_matrices_for_relation
-import dataset_tools
+# from tools.feature_matrices import parse_matrices_for_relation
+from tools.feature_matrices import parse_feature_matrix
+from tools import dataset_tools, train_test
 
 
-def get_target_relations(data_set_name):
-    if data_set_name == 'NELL':
-        data_path = './results/NELL186/TransE/1524632595/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = './benchmarks/NELL186'
-        corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_5to1.txt'
-    elif data_set_name == 'FB13':
-        data_path = './results/FB13/TransE/1524490825/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = './benchmarks/FB13'
-        corrupted_data_path = './benchmarks/FB13/corrupted/train2id_bern_2to1.txt'
-    elif data_set_name == 'WN11':
-        data_path = './results/WN11/TransE/1524623630/pra_explain/results/extract_feat__neg_by_random'
-        original_data_path = './benchmarks/WN11'
-        corrupted_data_path = './benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
-    elif data_set_name == 'g_hat_WN11':
-        data_path = './results/WN11/TransE/1524623630/pra_explain/results/results/g_hat_5nn_2negrate_bern'
-        original_data_path = './benchmarks/WN11'
-        corrupted_data_path = './benchmarks/WN11/corrupted/train2id_bern_2to1.txt'
-    elif data_set_name == 'g_hat_NELL':
-        data_path = './results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
-        original_data_path = './benchmarks/NELL186'
-        corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
-    return data_path, original_data_path, corrupted_data_path, os.listdir(data_path)
-
-
-def get_reasons(row):
+def get_reasons(row, n=10):
     # Remove zero elements
     reasons = row[row != 0]
     # Select the top n_examples elements
-    top_reasons_abs = reasons.abs().nlargest(n=10, keep='first')
+    top_reasons_abs = reasons.abs().nlargest(n=n, keep='first')
     # Create a pandas series with these
     output = pd.Series()
     counter = 1
@@ -54,177 +31,210 @@ def get_reasons(row):
         output['reason' + str(counter)] = reason_name
         output['relevance' + str(counter)] = reasons[reason]
         counter = counter + 1
-        if counter == 10:
+        if counter == n:
             break
-    for i in range(counter, 10):
+    for i in range(counter, n):
         output['reason' + str(i)] = "n/a"
         output['relevance' + str(i)] = "n/a"
     return output
 
 
-def import_embeddings(dataset_name, embedding_model=models.TransE):
-    if dataset_name == "NELL186":
-        model_timestamp = 1524632595
-    elif dataset_name == "FB13":
-        model_timestamp = 1524490825
-    import_path = './results/{}/{}/{}/'.format(
-        dataset_name,
-        embedding_model.__name__,
-        model_timestamp
-    )
-    g_hat_path = import_path + '/g_hat/'
-    model_info_df = pd.read_csv('{}model_info.tsv'.format(import_path), sep='\t')
-    # transform model info into dict with only one "row"
-    model_info = model_info_df.to_dict()
-    for key, d in model_info.iteritems():
-        model_info[key] = d[0]
-    # Load the embeddings
-    con = config.Config()
-    dataset_path = "./benchmarks/{}/".format(model_info['dataset_name'])
-    con.set_in_path(dataset_path)
-    con.set_test_link_prediction(False)
-    con.set_test_triple_classification(True)
-    con.set_work_threads(multiprocessing.cpu_count())
-    con.set_dimension(int(model_info['k']))
-    con.score_norm = model_info['score_norm']
-    con.init()
-    con.set_model(embedding_model)
-    con.import_variables("{}tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
-
-    return con
-
 
 class Explanator(object):
-    def __init__(self, dataset_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path, model_name="TransE", knn=True):
-        self.complete_dataframe = complete_dataframe
+    def __init__(self, emb_model_path, ground_truth_dataset_path, target_relation, data_path):
         self.target_relation = target_relation
         self.data_path = data_path
-        self.original_data_path = original_data_path
-        self.corrupted_data_path = corrupted_data_path
-
-        self.valid_exists = True
-        self.test_exists = True
-        self.stats = {}
-        self.stats['Relation'] = target_relation
+        self.ground_truth_dataset_path = ground_truth_dataset_path
 
         # Define the model
-        param_grid = [
-            {'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
-             'alpha': [0.01, 0.001, 0.0001]}
-        ]
+        param_grid = [{
+            'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
+            'alpha': [0.01, 0.001, 0.0001],
+            'loss': "log",
+            'penalty': "elasticnet",
+            'max_iter': 100000,
+            'tol': 1e-3,
+            'class_weight': "balanced",
+            'n_jobs': 4,
+        }]
 
-        self.model_definition = SGDClassifier(loss="log",
-                                         penalty="elasticnet",
-                                         max_iter=100000,
-                                         tol=1e-3,
-                                         class_weight="balanced",
-					                     n_jobs=4)
+        self.model_definition = SGDClassifier()
         self.grid_search = GridSearchCV(self.model_definition, param_grid, n_jobs=4)
 
         # Get the embedding model
-        self.emb_model = import_embeddings(dataset_name, getattr(models, model_name))
-
-        #Define the KNN model
-        if knn:
-            max_knn_k = 100
-            self.embed_params = self.emb_model.get_parameters()
-            self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=8).fit(self.embed_params['ent_embeddings'])
+        self.emb_model = train_test.restore_model(emb_model_path)
 
 
-    def append_to_dataframe(self):
-        self.complete_dataframe = self.complete_dataframe.append(self.stats, ignore_index=True)
+
+    def define_knn():
+        max_knn_k = 100
+        self.embed_params = self.emb_model.get_parameters()
+        self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=4).fit(self.embed_params['ent_embeddings'])
 
 
-    def export_dataframe(self, filepath):
-        self.complete_dataframe.to_csv(filepath, mode='a', index=False, header=False)
 
+    def read_data(self, pra_results_dpath, target_relation):
+        """Read embedding predicted data for the target relation from the split (i.e., from data
+        whose features were extracted and whose labels are predictions from the embedding model).
 
-    def extract_data(self):
-        """ Extract data for the target relation from both the original and corrupted datasets """
-        # Get original data
-        original_data_path = self.original_data_path
-        self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(original_data_path,'entity2id.txt'))
-        self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(original_data_path, 'relation2id.txt'))
+        Data is stored into the following lists or numpy ndarrays:
 
-        true_train = pd.read_csv(self.corrupted_data_path, sep=' ', skiprows=1, names=['e1', 'e2', 'rel', 'true_label'])
-        true_valid = pd.read_csv(os.path.join(original_data_path, 'valid.txt'), sep='\t', skiprows=1, names=['head', 'rel_name', 'tail', 'true_label'])
-        self.stats['# Triples Valid'] = true_valid[true_valid['rel_name']==target_relation].shape[0]
-        true_test = pd.read_csv(os.path.join(original_data_path, 'test.txt'), sep='\t', skiprows=1, names=['head', 'rel_name', 'tail', 'true_label'])
-        self.stats['# Triples Test'] = true_test[true_test['rel_name']==target_relation].shape[0]
-        # Put all the original data together
-        true_data = pd.concat([true_train, true_valid, true_test])
+        - self.train_heads: contains the head for each training example
+        - self.train_tails: contains the tail for each training example
+        - self.train_y: contains the label (by the embedding model) for each training example
+        - self.train_x: contains the extracted features (by PRA/SFE) for each training example
 
-        # Functions to recover entities and relations names
-        def apply_id2relation(x):
-            return self.id2relation[x]
+        - self.test_heads: contains the head for each testing example
+        - self.test_tails: contains the tail for each testing example
+        - self.test_y: contains the label (by the embedding model) for each testing example
+        - self.test_x: contains the extracted features (by PRA/SFE) for each testing example
 
-        def apply_id2entity(x):
-            return self.id2entity[x]
+        If there is no test data, then we do not even train an explanation to begin with, and
+        `False` is returned. If everything went alright, then `True` is returned.
+        """
+        ###################################################
+        ###################################################
+        ###################################################
+        train_fpath = "{}/{}/train.tsv".format(pra_results_dpath, target_relation)
+        valid_fpath = "{}/{}/valid.tsv".format(pra_results_dpath, target_relation)
+        test_fpath  = "{}/{}/test.tsv" .format(pra_results_dpath, target_relation)
 
-        # Add relations and entities names to dataset
-        # Training data
-        true_train['rel_name'] = true_train['rel'].apply(apply_id2relation)
-        self.stats['# Triples Train'] = true_train[true_train['rel_name']==target_relation].shape[0]
-        true_train['head'] = true_train['e1'].apply(apply_id2entity)
-        true_train['tail'] = true_train['e2'].apply(apply_id2entity)
-
-        # Get target relation data
-        # Get the parser for the feature matrices
-        parser = parse_matrices_for_relation(data_path, self.target_relation)
-
-        self.train_data = pd.DataFrame(columns=['head', 'tail', 'label'])
-        self.train_data['head'] = parser['train_heads']
-        self.train_data['tail'] = parser['train_tails']
-        self.train_data['label'] = parser['train_labels']
-
-        self.test_data = pd.DataFrame(columns=['head', 'tail', 'label'])
-        self.test_data['head'] = parser['test_heads']
-        self.test_data['tail'] = parser['test_tails']
-        self.test_data['label'] = parser['test_labels']
-
-        self.valid_data = pd.DataFrame(columns=['head', 'tail', 'label'])
-        self.valid_data['head'] = parser['valid_heads']
-        self.valid_data['tail'] = parser['valid_tails']
-        self.valid_data['label'] = parser['valid_labels']
-
-        # Get true labels for target relations (training data)
-        rel_true_train = true_train[true_train['rel_name']==self.target_relation].copy()
-        self.train_data = self.train_data.merge(rel_true_train[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
-        self.train_data = self.train_data.fillna(-1)
-        # separate x (features) and y (labels) for training data
-        self.train_y = self.train_data.pop('label')
-        self.true_train_y = self.train_data.pop('true_label')
-        self.train_x = parser['train_X']
-
-        # Save features names and number of features before pre-processing
-        self.columns = parser['vectorizer'].get_feature_names()
-        self.stats['# Features'] = len(self.columns)
-
-        # Get true labels for target relations (validation data)
-        rel_true_valid = true_valid[true_valid['rel_name']==self.target_relation].copy()
-
-        if rel_true_valid.empty or self.valid_data.empty:
-            self.valid_exists = False
+        # check if `test.tsv` and `train.tsv` are present
+        if not os.path.exists(test_fpath):
+            print("There is no test file for relation `{}`, skipping.".format(target_relation))
+            return False
         else:
-            self.valid_data = self.valid_data.merge(rel_true_valid[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
-            self.valid_data = self.valid_data.fillna(-1)
-            # Validation data
-            self.valid_y = self.valid_data.pop('label')
-            self.true_valid_y = self.valid_data.pop('true_label')
-            self.valid_x = parser['valid_X']
-        # Get true labels for target relations (test data)
-        rel_true_test = true_test[true_test['rel_name']==self.target_relation].copy()
-        if rel_true_test.empty or self.test_data.empty:
-            self.test_exists = False
-        else:
-            self.test_data = self.test_data.merge(rel_true_test[['head', 'tail', 'true_label']].drop_duplicates(subset=['head', 'tail']), how='left', on=['head', 'tail'])
-            self.test_data = self.test_data.fillna(-1)
-            # Test data
-            self.test_y = self.test_data.pop('label')
-            self.true_test_y = self.test_data.pop('true_label')
-            self.test_x = parser['test_X']
+            if not os.path.exists(train_fpath): raise IOError('`train.tsv` not present for relation `{}`'.format(target_relation))
+
+        # read train data (always present)
+        self.train_heads, self.train_tails, self.train_y, train_feat_dicts = parse_feature_matrix(train_fpath)
+        v = DictVectorizer(sparse=True)
+        v.fit(train_feat_dicts)
+        self.train_x = v.transform(train_feat_dicts)
+        self.feature_names = v.get_feature_names()
+
+        # read valid data (may not be present)
+        if os.path.exists(valid_fpath):
+            valid_heads, valid_tails, valid_y, valid_feat_dicts = parse_feature_matrix(valid_fpath)
+            valid_x = v.transform(valid_feat_dicts)
+            # we merge validation with training data, because the GridSearchCV creates the valid split automatically
+            self.train_heads += valid_heads
+            self.train_tails += valid_tails
+            self.train_x = np.concatenate((self.train_x, self.valid_x), axis=0)
+            self.train_y = np.concatenate((self.train_y, self.valid_y), axis=0)
+
+        # read test data (always present)
+        self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
+        self.test_x = v.transform(test_feat_dicts)
+
+        # check that there are not only positive or negative labels in training set
+        if len(np.unique(self.train_y)) <= 1:
+            print("Not possible to train explainable model in relation `{}` because training set contains a single class.".format(target_relation))
+            return False
 
         return True
+
+
+
+    def read_ground_truth_labels(self, dataset_path, target_relation):
+        """Read ground truth data from the original dataset and extract labels for the data
+        present in the split (i.e., data whose features are extracted and that is present in
+        `self.train_x`, etc.).
+
+        We get the original data from a list of positive triples in order to dispense with the need
+        for having the corrupted data path (that may change from model to model).
+        """
+        entity2id, id2entity = dataset_tools.read_name2id_file(os.path.join(dataset_path,'entity2id.txt'))
+        relation2id, id2relation = dataset_tools.read_name2id_file(os.path.join(dataset_path, 'relation2id.txt'))
+
+        # these files have no labels, they are all positive instances
+        gt_train2id = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
+        gt_valid2id = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
+        gt_test2id  = pd.read_csv(os.path.join(dataset_path, 'test2id.txt' ), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
+
+        # merge train and validation data
+        gt_train2id = pd.concat((gt_train2id, gt_valid2id))
+
+        # get id of target relation
+        target_relation_id = relation2id[target_relation]
+
+        # filter data to get only triples whose relation is the target relation
+        gt_train2id_filt = gt_train2id.loc[gt_train2id['relation'] == target_relation_id]
+        gt_test2id_filt  =  gt_test2id.loc[ gt_test2id['relation'] == target_relation_id]
+
+        # compare split data with ground truth data and create labels
+        heads2id = [entity2id[h] for h in self.train_heads]
+        tails2id = [entity2id[t] for t in self.train_tails]
+
+        self.train_true_y = []
+        for head,tail in zip(heads2id, tails2id):
+            matches = len(gt_train2id_filt.loc[
+                (gt_train2id_filt['head'] == head) &
+                (gt_train2id_filt['tail'] == tail)
+            ])
+            self.train_true_y.append(1 if matches > 0 else -1)
+
+        self.test_true_y = []
+        for head,tail in zip(heads2id, tails2id):
+            matches = len(gt_test2id_filt.loc[
+                (gt_test2id_filt['head'] == head) &
+                (gt_test2id_filt['tail'] == tail)
+            ])
+            self.test_true_y.append(1 if matches > 0 else -1)
+
+
+    def get_stats():
+        stats = {}
+
+        # relation and data information
+        stats['Relation'] = self.target_relation
+        stats['# Triples Train'] = len(train_heads)
+        stats['# Triples Test '] = len(test_heads )
+        # stats['# Triples Valid'] = ??? # we are now using the CV's validation sets
+
+        # model parameters
+        stats['alpha']    = self.grid_search.best_params_['alpha'   ]
+        stats['l1_ratio'] = self.grid_search.best_params_['l1_ratio']
+
+        # accuracy
+        stats['Test Accuracy']              = self.model.score(self.test_x,  self.test_y)
+        stats['True Test Accuracy']         = self.model.score(self.test_x,  self.test_true_y)
+        stats['Train Accuracy']             = self.model.score(self.train_x, self.train_y)
+        stats['True Train Accuracy']        = self.model.score(self.train_x, self.train_true_y)
+
+        # precision
+        stats['Test Precision']             = precision_score(self.test_y,       self.model.predict(self.test_x))
+        stats['True Test Precision']        = precision_score(self.test_true_y,  self.model.predict(self.test_x))
+        stats['Train Precision']            = precision_score(self.train_y,      self.model.predict(self.train_x))
+        stats['True Train Precision']       = precision_score(self.train_true_y, self.model.predict(self.train_x))
+
+        # recall
+        stats['Test Recall']                = recall_score(self.test_y,       self.model.predict(self.test_x))
+        stats['True Test Recall']           = recall_score(self.test_true_y,  self.model.predict(self.test_x))
+        stats['Train Recall']               = recall_score(self.train_y,      self.model.predict(self.train_x))
+        stats['True Train Recall']          = recall_score(self.train_true_y, self.model.predict(self.train_x))
+
+        # F1 score
+        stats['Test F1_score']              = f1_score(self.test_y,       self.model.predict(self.test_x))
+        stats['True Test F1_score']         = f1_score(self.test_true_y,  self.model.predict(self.test_x))
+        stats['Train F1_score']             = f1_score(self.train_y,      self.model.predict(self.train_x))
+        stats['True Train F1_score']        = f1_score(self.train_true_y, self.model.predict(self.train_x))
+
+        stats['Test Positive Ratio']        = self.test_y[      self.test_y==1      ].shape[0]/self.test_y.shape[0]
+        stats['True Test Positive Ratio']   = self.test_true_y[ self.test_true_y==1 ].shape[0]/self.test_true_y.shape[0]
+        stats['Train Positive Ratio']       = self.train_y[     self.train_y==1     ].shape[0]/self.train_y.shape[0]
+        stats['True Train Positive Ratio']  = self.train_true_y[self.train_true_y==1].shape[0]/self.train_true_y.shape[0]
+
+        stats['Train Embedding Accuracy']   = self.train_y[self.train_y == self.train_true_y].shape[0]/self.train_y.shape[0]
+        stats['Test Embedding Accuracy']    = self.test_y[ self.test_y == self.test_true_y  ].shape[0]/self.test_y.shape[0]
+
+        # relevant features
+        stats['# Relevant Features'] = self.explanation[self.explanation['scores'] != 0].shape[0]
+
+        return stats
+
+
+
 
     def train_local_logit(self, head, tail):
         """ Train and evaluate the model locally """
@@ -250,6 +260,7 @@ class Explanator(object):
         test_y = self.test_y.iloc[test_index]
         prediction = self.model_definition.predict_proba(test_x)[:, 1]
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
+
 
     def train_local_regression(self, head, tail):
         """ Train and evaluate the model locally """
@@ -287,126 +298,21 @@ class Explanator(object):
         prediction = self.regression_model.predict(test_x)[:, 1]
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
+
+
+
     def train(self):
-        """ Train and evaluate the model """
+        """ Train the explainable model.
+        """
+        self.grid_search.fit(self.train_x, self.train_y)
 
-        # Search for the best parameters
-    	try:
-            training_examples = np.concatenate((self.train_x, self.valid_x), axis=0)
-            training_examples_y = np.concatenate((self.train_y, self.valid_y), axis=0)
-    	except:
-            training_examples = self.train_x
-            training_examples_y = self.train_y
+        # best model is accessed through `best_estimator_`
+        self.model = self.grid_search.best_estimator_
 
-        try:
-            self.grid_search.fit(training_examples, training_examples_y)
-            #  self.grid_search.fit(self.train_x, self.train_y)
-        except ValueError:
-            print("Not possible to fit a logit for this relation because it contains a single class.")
 
-        alpha = self.grid_search.best_params_['alpha']
-        self.stats['alpha'] = alpha
-        l1_ratio = self.grid_search.best_params_['l1_ratio']
-        self.stats['l1_ratio'] = l1_ratio
-        # Fit the best model
-        # We need to refit it because GridSearchCV does give access to coef_
-        self.model = SGDClassifier(l1_ratio=l1_ratio, alpha=alpha, loss="log", penalty="elasticnet",
-                      max_iter=100000, tol=1e-3, class_weight="balanced")
 
-        self.model.fit(self.train_x, self.train_y)
 
-        ### Get evaluation metrics
-        # Get accuracy
-        if self.test_exists:
-            self.stats['Test Accuracy'] = self.model.score(self.test_x, self.test_y)
-            self.stats['True Test Accuracy'] = self.model.score(self.test_x, self.true_test_y)
-        else:
-            self.stats['Test Accuracy'] = -1
-            self.stats['True Test Accuracy'] = -1
-        if self.valid_exists:
-            self.stats['Valid Accuracy'] = self.model.score(self.valid_x, self.valid_y)
-            self.stats['True Valid Accuracy'] = self.model.score(self.valid_x, self.true_valid_y)
-        else:
-            self.stats['Valid Accuracy'] = -1
-            self.stats['True Valid Accuracy'] = -1
-        self.stats['Train Accuracy'] = self.model.score(self.train_x, self.train_y)
-        self.stats['True Train Accuracy'] = self.model.score(self.train_x, self.true_train_y)
-
-        # Get precision
-        if self.test_exists:
-            self.stats['Test Precision'] = precision_score(self.test_y, self.model.predict(self.test_x))
-            self.stats['True Test Precision'] = precision_score(self.true_test_y, self.model.predict(self.test_x))
-        else:
-            self.stats['Test Precision'] = -1
-            self.stats['True Test Precision'] = -1
-        if False: #self.valid_exists:
-            self.stats['Valid Precision'] = precision_score(self.valid_y, self.model.predict(self.valid_x))
-            self.stats['True Valid Precision'] = precision_score(self.true_valid_y, self.model.predict(self.valid_x))
-        else:
-            self.stats['Valid Precision'] = -1
-            self.stats['True Valid Precision'] = -1
-        self.stats['Train Precision'] = precision_score(self.train_y, self.model.predict(self.train_x))
-        self.stats['True Train Precision'] = precision_score(self.true_train_y, self.model.predict(self.train_x))
-
-        # Get recall
-        if self.test_exists:
-            self.stats['Test Recall'] = recall_score(self.test_y, self.model.predict(self.test_x))
-            self.stats['True Test Recall'] = recall_score(self.true_test_y, self.model.predict(self.test_x))
-        else:
-            self.stats['Test Recall'] = -1
-            self.stats['True Test Recall'] = -1
-        if self.valid_exists:
-            self.stats['Valid Recall'] = recall_score(self.valid_y, self.model.predict(self.valid_x))
-            self.stats['True Valid Recall'] = recall_score(self.true_valid_y, self.model.predict(self.valid_x))
-        else:
-            self.stats['Valid Recall'] = -1
-            self.stats['True Valid Recall'] = -1
-        self.stats['Train Recall'] = recall_score(self.train_y, self.model.predict(self.train_x))
-        self.stats['True Train Recall'] = recall_score(self.true_train_y, self.model.predict(self.train_x))
-
-        # Get F1 score
-        if self.test_exists:
-            self.stats['Test F1_score'] = f1_score(self.test_y, self.model.predict(self.test_x))
-            self.stats['True Test F1_score'] = f1_score(self.true_test_y, self.model.predict(self.test_x))
-        else:
-            self.stats['Test F1_score'] = -1
-            self.stats['True Test F1_score'] = -1
-        if self.valid_exists:
-            self.stats['Valid F1_score'] = f1_score(self.valid_y, self.model.predict(self.valid_x))
-            self.stats['True Valid F1_score'] = f1_score(self.true_valid_y, self.model.predict(self.valid_x))
-        else:
-            self.stats['Valid F1_score'] = -1
-            self.stats['True Valid F1_score'] = -1
-        self.stats['Train F1_score'] = f1_score(self.train_y, self.model.predict(self.train_x))
-        self.stats['True Train F1_score'] = f1_score(self.true_train_y, self.model.predict(self.train_x))
-
-        if self.test_exists:
-            self.stats['Test Positive Ratio'] = self.test_y[self.test_y==1].shape[0]/self.test_y.shape[0]
-            self.stats['True Test Positive Ratio'] = self.true_test_y[self.true_test_y==1].shape[0]/self.true_test_y.shape[0]
-        else:
-            self.stats['Test Positive Ratio'] = -1
-            self.stats['True Test Positive Ratio'] = -1
-        if self.valid_exists:
-            self.stats['Valid Positive Ratio'] = self.valid_y[self.valid_y==1].shape[0]/self.valid_y.shape[0]
-            self.stats['True Valid Positive Ratio'] = self.true_valid_y[self.true_valid_y==1].shape[0]/self.true_valid_y.shape[0]
-        else:
-            self.stats['Valid Positive Ratio'] = -1
-            self.stats['True Valid Positive Ratio'] = -1
-
-        self.stats['Train Positive Ratio'] = self.train_y[self.train_y==1].shape[0]/self.train_y.shape[0]
-        self.stats['True Train Positive Ratio'] = self.true_train_y[self.true_train_y==1].shape[0]/self.true_train_y.shape[0]
-
-        self.stats['Train Embedding Accuracy'] = self.train_y[self.train_y == self.true_train_y].shape[0]/self.train_y.shape[0]
-        if self.test_exists:
-            self.stats['Test Embedding Accuracy'] = self.test_y[self.test_y == self.true_test_y].shape[0]/self.test_y.shape[0]
-        else:
-            self.stats['Test Embedding Accuracy'] = -1
-        if self.valid_exists:
-            self.stats['Valid Embedding Accuracy'] = self.valid_y[self.valid_y == self.true_valid_y].shape[0]/self.valid_y.shape[0]
-        else:
-            self.stats['Valid Embedding Accuracy'] = -1
-
-    def explain_per_example(self, data_path, data_type, n_examples=10):
+    def explain_per_example(self, output_path, data_type, n_examples=10):
         coefficients = self.model.coef_.reshape(-1,1)
         if data_type == 'train':
             x = self.train_x
@@ -430,8 +336,8 @@ class Explanator(object):
         repeated_coefficients = np.repeat(coefficients.T, n_examples, axis=0)
         explanations = np.multiply(features, repeated_coefficients)
         # Define a pandas DataFrame to hold the information
-        examples_df = pd.DataFrame(explanations, columns=self.columns)
-        examples_df.columns = self.columns
+        examples_df = pd.DataFrame(explanations, columns=self.feature_names)
+        examples_df.columns = self.feature_names
 
         final_reasons = examples_df.apply(get_reasons, axis=1)
         final_reasons['head'] = data.iloc[index]['head'].values
@@ -440,7 +346,7 @@ class Explanator(object):
         final_reasons['y_logit'] = answers
         final_reasons['y_hat'] = y_hat
         final_reasons['y'] = y
-        final_reasons.to_csv(data_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv', index=False)
+        final_reasons.to_csv(output_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv')
         return final_reasons
 
     def explain(self):
@@ -449,67 +355,14 @@ class Explanator(object):
         self.coefficients = self.model.coef_.reshape(-1,1)
 
         self.explanation = pd.DataFrame(self.coefficients, columns=['scores'])
-        self.explanation['path'] = self.columns
+        self.explanation['path'] = self.feature_names
         self.explanation = self.explanation.sort_values(by="scores", ascending=False)
         explanation = self.explanation[self.explanation['scores'] != 0]
         self.most_relevant_variables = pd.concat([explanation.iloc[0:10], explanation.iloc[-10:-1]])
-        self.stats['# Relevant Features'] = self.explanation[self.explanation['scores'] != 0].shape[0]
 
-    def report(self):
-        file_path = os.path.join(self.data_path, self.target_relation, self.target_relation + '_explained.txt')
-        open(file_path, 'w+').close()
-        np.savetxt(file_path, self.most_relevant_variables.values, fmt= '%s')
-        with open(file_path, 'a') as f:
-            f.write("\n---------------------------------------------")
-            f.write("\nNumber of relevant variables : %0.2f" % self.stats['# Relevant Features'])
-            f.write("\nTotal number of variables : %0.2f" % self.stats['# Features'])
-            f.write("\n\nDataset Positive Ratio:")
-            f.write("\n   Test : %0.2f" % self.stats['Test Positive Ratio'])
-            f.write("\n   True test: %0.2f" % self.stats['True Test Positive Ratio'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid Positive Ratio'])
-            f.write("\n   True Valid: %0.2f" % self.stats['True Valid Positive Ratio'])
-            f.write("\n   Train: %0.2f" % self.stats['Train Positive Ratio'])
-            f.write("\n   True Train: %0.2f" % self.stats['True Train Positive Ratio'])
-            f.write("\n---------------------------------------------")
-            f.write("\n\nEmbedding Accuracy:")
-            f.write("\n   Test: %0.2f" % self.stats['Test Embedding Accuracy'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid Embedding Accuracy'])
-            f.write("\n   Train: %0.2f" % self.stats['Train Embedding Accuracy'])
-            f.write("\n\nAccuracy:")
-            f.write("\n   Test: %0.2f" % self.stats['Test Accuracy'])
-            f.write("\n   True test: %0.2f" % self.stats['True Test Accuracy'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid Accuracy'])
-            f.write("\n   True Valid: %0.2f" % self.stats['True Valid Accuracy'])
-            f.write("\n   Train: %0.2f" % self.stats['Train Accuracy'])
-            f.write("\n   True Train: %0.2f" % self.stats['True Train Accuracy'])
 
-            f.write("\n\nPrecision:")
-            f.write("\n   Test: %0.2f" % self.stats['Test Precision'])
-            f.write("\n   True test: %0.2f" % self.stats['True Test Precision'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid Precision'])
-            f.write("\n   True Valid: %0.2f" % self.stats['True Valid Precision'])
-            f.write("\n   Train: %0.2f" % self.stats['Train Precision'])
-            f.write("\n   True Train: %0.2f" % self.stats['True Train Precision'])
 
-            f.write("\n\nRecall: ")
-            f.write("\n   Test: %0.2f" % self.stats['Test Recall'])
-            f.write("\n   True test: %0.2f" % self.stats['True Test Recall'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid Recall'])
-            f.write("\n   True Valid: %0.2f" % self.stats['True Valid Recall'])
-            f.write("\n   Train: %0.2f" % self.stats['Train Recall'])
-            f.write("\n   True Train: %0.2f" % self.stats['True Train Recall'])
-
-            f.write("\n\nF1_score:")
-            f.write("\n   Test: %0.2f" % self.stats['Test F1_score'])
-            f.write("\n   True test: %0.2f" % self.stats['True Test F1_score'])
-            f.write("\n   Valid: %0.2f" % self.stats['Valid F1_score'])
-            f.write("\n   True Valid: %0.2f" % self.stats['True Valid F1_score'])
-            f.write("\n   Train: %0.2f" % self.stats['Train F1_score'])
-            f.write("\n   True Train: %0.2f" % self.stats['True Train F1_score'])
-            f.write("\n---------------------------------------------")
-            f.write("\n" + str(self.model.get_params()))
-
-if __name__ == '__main__':
+def main(emb_model_path, feat_data_dir, corrupted_data_path):
     # parser = argparse.Argumentparser()
 
     # parser.add_argument(
@@ -522,39 +375,50 @@ if __name__ == '__main__':
 
     # args = parser.parse_args()
 
-    columns = ['Relation', '# Triples Train', '# Triples Valid', '# Triples Test', '# Features', '# Relevant Features',
-               'Test Embedding Accuracy', 'Valid Embedding Accuracy', 'Train Embedding Accuracy',
-               'Test Positive Ratio', 'True Test Positive Ratio', 'Valid Positive Ratio', 'True Valid Positive Ratio', 'Train Positive Ratio', 'True Train Positive Ratio',
-               'Test Accuracy', 'True Test Accuracy', 'Valid Accuracy', 'True Valid Accuracy', 'Train Accuracy', 'True Train Accuracy',
-               'Test Precision', 'True Test Precision', 'Valid Precision', 'True Valid Precision', 'Train Precision', 'True Train Precision',
-               'Test Recall', 'True Test Recall', 'Valid Recall', 'True Valid Recall', 'Train Recall', 'True Train Recall',
-               'Test F1_score', 'True Test F1_score', 'Valid F1_score', 'True Valid F1_score', 'Train F1_score', 'True Train F1_score',
-               'l1_ratio', 'alpha'
-              ]
 
-    data_base_names = ['FB13']
-    for data_base_name in data_base_names:
+    # data_base_name = 'FB13'
 
-        data_path, original_data_path, corrupted_data_path, target_relations = get_target_relations(data_base_name)
+    ### Example of input variables to serve as reference later
+    ## data_path = './results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
+    ## original_data_path = './benchmarks/NELL186'
+    ## corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
+    ## target_relations = os.listdir(data_path)
 
-	# Export dataframe headers to csv
-        complete_dataframe = pd.DataFrame(columns=columns)
-        complete_dataframe.to_csv(data_path + data_base_name + '.csv', index=False)
-        target_relations = ['nationality']
-        for target_relation in target_relations:
-            print("Training on " + target_relation + " relations")
-            exp = Explanator(data_base_name, complete_dataframe, target_relation, data_path, original_data_path, corrupted_data_path)
-            if exp.extract_data():
-                exp.train_local_regression("john_forsyth", "roman_empire")
-                # exp.train():
-                # print('    Generating explanation')
-                # exp.explain()
-                # print('    Generating report')
-                # exp.report()
-                # print('    Saving to csv')
-                # exp.append_to_dataframe()
-                # exp.export_dataframe(data_path + data_base_name + '.csv')
-                # print('    Generating per-example explanations')
-                # exp.explain_per_example(data_path, 'test')
-            else:
-                print("No test data for ", target_relation, " data")
+    # emb_model_path = './results/NELL186/TransE/1524632595/'
+    # feat_data_dir = 'g_hat_5nn_5negrate_bern'
+    # corrupted_data_path = ???
+    data_path   = emb_model_path + '/pra_explain/results/'           + feat_data_dir # hardcoded, for now extracted features will always be in `pra_explain/results`
+    output_path = emb_model_path + '/pra_explain/results_explained/' + feat_data_dir
+
+    target_relations = os.listdir(data_path)
+    model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
+    dataset_name = model_info['dataset_name']
+    ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name']
+
+
+
+
+
+    relations_info = []
+    target_relations = ['nationality'] # for debugging purposes
+    for target_relation in target_relations:
+        print("Training on " + target_relation + " relations")
+        exp = Explanator(emb_model_path, ground_truth_dataset_path, target_relation, data_path)
+        if exp.read_data():
+            exp.train_local_regression("john_forsyth", "roman_empire")
+            # exp.train():
+            # print('    Generating explanation')
+            # exp.explain()
+            # print('    Generating report')
+            # exp.report()
+            # print('    Saving to csv')
+            # exp.append_to_dataframe()
+            ### # exp.export_dataframe(data_path + data_base_name + '.csv')
+            relations_info.append(exp.get_stats())
+            # print('    Generating per-example explanations')
+            # exp.explain_per_example(data_path, 'test')
+        else:
+            print("No test data for relation `{}`.".format(target_relation))
+
+    # save relations info somewhere
+    pd.DataFrame(relations_info).to_csv(output_path + 'overall_info.tsv', sep='\t')

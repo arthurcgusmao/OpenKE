@@ -4,11 +4,35 @@ import pandas as pd
 from sklearn.feature_extraction import DictVectorizer
 
 
+def parse_feature_matrix(filepath):
+    """Returns four objects: three lists (of heads, tails and labels) and a sparse matrix (of
+    features) for the input (a path to a feature matrix file).
+    """
+    heads = []
+    tails = []
+    labels = []
+    feat_dicts = []
+    with open(filepath, 'r') as f:
+        for line in f:
+            ent_pair, label, features = line.split('\t')
+            head, tail = ent_pair.split(',')
+            d = {}
+            for feat in features.split(' -#- '):
+                feat_name, value = feat.split(',')
+                d[feat_name] = value
+
+            heads.append(head)
+            tails.append(tail)
+            labels.append(int(label))
+            feat_dicts.append(d)
+    return heads, tails, labels, feat_dicts
+
+
 def is_nan(x):
     return (x is np.nan or x != x)
 
 
-def parse_feature_matrix(filepath):
+def parse_feature_matrix_old(filepath):
     """Returns four objects: three lists (of heads, tails and labels) and a sparse matrix (of
     features) for the input (a path to a feature matrix file).
     """
@@ -45,9 +69,9 @@ def parse_matrices_for_relation(pra_results_dpath, relation_name):
     valid_fpath = "{}/{}/valid.tsv".format(pra_results_dpath, relation_name)
     test_fpath = "{}/{}/test.tsv".format(pra_results_dpath, relation_name)
 
-    train_heads, train_tails, train_labels, train_feat_dicts = parse_feature_matrix(train_fpath)
-    valid_heads, valid_tails, valid_labels, valid_feat_dicts = parse_feature_matrix(valid_fpath)
-    test_heads, test_tails, test_labels, test_feat_dicts = parse_feature_matrix(test_fpath)
+    train_heads, train_tails, train_labels, train_feat_dicts = parse_feature_matrix_old(train_fpath)
+    valid_heads, valid_tails, valid_labels, valid_feat_dicts = parse_feature_matrix_old(valid_fpath)
+    test_heads, test_tails, test_labels, test_feat_dicts = parse_feature_matrix_old(test_fpath)
 
     v = DictVectorizer(sparse=True)
     v.fit(train_feat_dicts)
@@ -75,5 +99,5 @@ def parse_matrices_for_relation(pra_results_dpath, relation_name):
         'test_tails': test_tails,
         'test_labels': test_labels,
         'test_X': test_X,
-        'vectorizer': v
+        'feature_names': v.get_feature_names()
     }

@@ -63,6 +63,53 @@ def plot_learning_curve(learning_curve, model_info, export_path=None):
     return fig
 
 
+def setup_config(model_info):
+    """Create config instance and set variables/hyperparameters.
+    """
+    con = config.Config()
+    dataset_path = "./benchmarks/{}/".format(model_info['dataset_name'])
+    con.set_in_path(dataset_path)
+    con.set_test_link_prediction(model_info['test_link_prediction'])
+    con.set_test_triple_classification(model_info['test_triple_class'])
+    con.set_log_on(model_info['log_on'], log_type=model_info['log_type'], log_print=model_info['log_print'])
+    con.set_train_times(model_info['n_epochs'])
+    if 'batch_size' in model_info:
+        con.set_batch_size(model_info['batch_size'])
+    elif 'n_batches' in model_info:
+        con.set_nbatches(model_info['n_batches'])
+    else:
+        raise ValueError('Either `batch_size` or `n_batches` should be defined in `model_info`.')
+    con.set_alpha(model_info['learning_rate'])
+    con.set_bern(model_info['bern'])
+    con.set_dimension(model_info['k'])
+    if 'margin' in model_info: con.set_margin(model_info['margin'])
+    if 'regul_weight' in model_info: con.set_lmbda(model_info['regul_weight'])
+    if 'score_norm' in model_info: con.score_norm = model_info['score_norm']
+    con.set_ent_neg_rate(model_info['ent_neg_rate'])
+    con.set_rel_neg_rate(model_info['rel_neg_rate'])
+    con.set_opt_method(model_info['opt_method'])
+    con.shuffle = model_info['shuffle']
+    con.set_work_threads(model_info['work_threads'])
+    return con
+
+
+def restore_model(import_path):
+    """Restores the whole model from a results folder using information that was saved in
+    `model_info.tsv` and `tf_model`, following the setup in `pipeline()`.
+    """
+    model_info_df = pd.read_csv('{}/model_info.tsv'.format(import_path), sep='\t')
+    # transform model info into dict with only one "row"
+    model_info = model_info_df.to_dict()
+    for key,d in model_info.iteritems():
+        model_info[key] = d[0]
+
+    # setup config instance
+    con = setup_config(model_info)
+    con.init()
+    con.set_model_by_name(model_info['model_name'])
+    con.import_variables("{}tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
+    return con
+
 
 def pipeline(model_info):
     """Train and tests an embedding model using the parameters supplied.
@@ -110,32 +157,7 @@ def pipeline(model_info):
 
     print "--- STARTING PIPELINE ---\n\n{}".format(model_info)
 
-    # Create config instance and set variables/hyperparameters
-    # --------------------------------------------------------
-    con = config.Config()
-    dataset_path = "./benchmarks/{}/".format(model_info['dataset_name'])
-    con.set_in_path(dataset_path)
-    con.set_test_link_prediction(model_info['test_link_prediction'])
-    con.set_test_triple_classification(model_info['test_triple_class'])
-    con.set_log_on(model_info['log_on'], log_type=model_info['log_type'], log_print=model_info['log_print'])
-    con.set_train_times(model_info['n_epochs'])
-    if 'batch_size' in model_info:
-        con.set_batch_size(model_info['batch_size'])
-    elif 'n_batches' in model_info:
-        con.set_nbatches(model_info['n_batches'])
-    else:
-        raise ValueError('Either `batch_size` or `n_batches` should be defined in `model_info`.')
-    con.set_alpha(model_info['learning_rate'])
-    con.set_bern(model_info['bern'])
-    con.set_dimension(model_info['k'])
-    if 'margin' in model_info: con.set_margin(model_info['margin'])
-    if 'regul_weight' in model_info: con.set_lmbda(model_info['regul_weight'])
-    if 'score_norm' in model_info: con.score_norm = model_info['score_norm']
-    con.set_ent_neg_rate(model_info['ent_neg_rate'])
-    con.set_rel_neg_rate(model_info['rel_neg_rate'])
-    con.set_opt_method(model_info['opt_method'])
-    con.shuffle = model_info['shuffle']
-    con.set_work_threads(model_info['work_threads'])
+    con = setup_config(model_info)
 
 
     # Training
