@@ -59,9 +59,8 @@ def get_dirs(dirpath):
 def ensure_dir(dirpath):
     """Creates the directory if it does not exist.
     """
-    directory = os.path.dirname(dirpath)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    if not os.path.exists(dirpath):
+        os.makedirs(dirpath)
 
 
 def get_reasons(row, n=10):
@@ -436,7 +435,7 @@ class Explanator(object):
         DataFrame with `feature` and `weight` columns, sorted from highest to lowest weight.
         """
         self.explanation = pd.DataFrame({
-            'weight': self.model.coef_.reshape(-1,1), # extract coefficients (weights)
+            'weight': self.model.coef_.reshape(-1), # extract coefficients (weights)
             'feature':   self.feature_names,
         }).sort_values(by="weight", ascending=False)
 
@@ -450,7 +449,7 @@ class Explanator(object):
             output_dir      = os.path.join(output_path, self.model_name)
             output_filepath = os.path.join(output_dir,  '{}.tsv'.format(self.target_relation))
             ensure_dir(output_dir)
-            self.explanation.to_csv(output_filepath, sep='\t')
+            self.explanation.to_csv(output_filepath, sep='\t', columns=['weight', 'feature'], index=False)
 
 
 ### --------------------------------------------------------------------------
