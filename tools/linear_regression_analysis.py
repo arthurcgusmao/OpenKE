@@ -17,6 +17,27 @@ import config, models
 from tools.feature_matrices import parse_feature_matrix
 from tools import dataset_tools, train_test
 
+### --------------------------------------------------------------------------
+### --------------------------------------------------------------------------
+
+def get_dirs(dirpath):
+    """Same as `os.listdir()` but ensures that only directories will be returned.
+    """
+    dirs = []
+    for f in os.listdir(dirpath):
+        f_path = os.path.join(dirpath, f)
+        if os.path.isdir(f_path):
+            dirs.append(f)
+    return dirs
+
+
+def ensure_dir(dirpath):
+    """Creates the directory if it does not exist.
+    """
+    directory = os.path.dirname(dirpath)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
 
 def get_reasons(row, n=10):
     # Remove zero elements
@@ -39,15 +60,15 @@ def get_reasons(row, n=10):
     return output
 
 
+### --------------------------------------------------------------------------
+### --------------------------------------------------------------------------
 
 class Explanator(object):
-    def __init__(self, emb_model_path, ground_truth_dataset_path, target_relation, data_path):
-        self.target_relation = target_relation
-        self.data_path = data_path
+    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=4):
+        self.emb_model_path
         self.ground_truth_dataset_path = ground_truth_dataset_path
-
-        # Define the model
-        param_grid = [{
+        self.n_jobs = n_jobs
+        self.param_grid = [{
             'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
             'alpha': [0.01, 0.001, 0.0001],
             'loss': "log",
@@ -57,25 +78,50 @@ class Explanator(object):
             'class_weight': "balanced",
             'n_jobs': 4,
         }]
-
-        self.model_definition = SGDClassifier()
-        self.grid_search = GridSearchCV(self.model_definition, param_grid, n_jobs=4)
-
-        # Get the embedding model
-        self.emb_model = train_test.restore_model(emb_model_path)
+        self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(dataset_path,'entity2id.txt'))
+        self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(dataset_path, 'relation2id.txt'))
 
 
+    def emb_predict(heads, tails, rels, batch_size=10000):
+        """Get the score for each head, tail and relation. Inputs `heads`, `tails`, and `rels`
+        should be names, and not IDs.
+        """
+        # get the embedding model
+        if not hasattr(self, 'emb_model'):
+            self.emb_model = train_test.restore_model(self.emb_model_path)
 
-    def define_knn():
-        max_knn_k = 100
+        # get head, tail and rel IDs
+        heads2id = [self.entity2id[h]   for h in heads]
+        tails2id = [self.entity2id[t]   for t in tails]
+        rels2id  = [self.relation2id[r] for r in rels ]
+
+        total_iters = (len(heads2id) + batch_size - 1) // batch_size # trick to ceil division using floor division
+
+        scores = []
+        for i in range(total_iters):
+            start = (i) * batch_size
+            end = (i+1) * batch_size
+            scores += self.emb_model.test_step(heads2id[start:end], tails2id[start:end], rels2id[start:end])
+        return scores
+
+
+    def define_knn(max_knn_k=100):
+        # get the embedding model
+        if not hasattr(self, 'emb_model'):
+            self.emb_model = train_test.restore_model(self.emb_model_path)
+
         self.embed_params = self.emb_model.get_parameters()
         self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=4).fit(self.embed_params['ent_embeddings'])
 
 
-
-    def read_data(self, pra_results_dpath, target_relation):
+    def load_data(self, split_path, target_relation):
         """Read embedding predicted data for the target relation from the split (i.e., from data
         whose features were extracted and whose labels are predictions from the embedding model).
+
+        -------------------------------------
+        WARNING: this function should be called whenever we change from one relation to another, so
+        that it changes the `target_relation` and get the split data for the new relation.
+        -------------------------------------
 
         Data is stored into the following lists or numpy ndarrays:
 
@@ -92,12 +138,11 @@ class Explanator(object):
         If there is no test data, then we do not even train an explanation to begin with, and
         `False` is returned. If everything went alright, then `True` is returned.
         """
-        ###################################################
-        ###################################################
-        ###################################################
-        train_fpath = "{}/{}/train.tsv".format(pra_results_dpath, target_relation)
-        valid_fpath = "{}/{}/valid.tsv".format(pra_results_dpath, target_relation)
-        test_fpath  = "{}/{}/test.tsv" .format(pra_results_dpath, target_relation)
+        self.target_relation = target_relation
+
+        train_fpath = "{}/{}/train.tsv".format(split_path, target_relation)
+        valid_fpath = "{}/{}/valid.tsv".format(split_path, target_relation)
+        test_fpath  = "{}/{}/test.tsv" .format(split_path, target_relation)
 
         # check if `test.tsv` and `train.tsv` are present
         if not os.path.exists(test_fpath):
@@ -136,7 +181,7 @@ class Explanator(object):
 
 
 
-    def read_ground_truth_labels(self, dataset_path, target_relation):
+    def load_ground_truth_labels(self, dataset_path, target_relation):
         """Read ground truth data from the original dataset and extract labels for the data
         present in the split (i.e., data whose features are extracted and that is present in
         `self.train_x`, etc.).
@@ -144,9 +189,6 @@ class Explanator(object):
         We get the original data from a list of positive triples in order to dispense with the need
         for having the corrupted data path (that may change from model to model).
         """
-        entity2id, id2entity = dataset_tools.read_name2id_file(os.path.join(dataset_path,'entity2id.txt'))
-        relation2id, id2relation = dataset_tools.read_name2id_file(os.path.join(dataset_path, 'relation2id.txt'))
-
         # these files have no labels, they are all positive instances
         gt_train2id = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
         gt_valid2id = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
@@ -163,8 +205,8 @@ class Explanator(object):
         gt_test2id_filt  =  gt_test2id.loc[ gt_test2id['relation'] == target_relation_id]
 
         # compare split data with ground truth data and create labels
-        heads2id = [entity2id[h] for h in self.train_heads]
-        tails2id = [entity2id[t] for t in self.train_tails]
+        heads2id = [self.entity2id[h] for h in self.train_heads]
+        tails2id = [self.entity2id[t] for t in self.train_tails]
 
         self.train_true_y = []
         for head,tail in zip(heads2id, tails2id):
@@ -183,8 +225,12 @@ class Explanator(object):
             self.test_true_y.append(1 if matches > 0 else -1)
 
 
-    def get_stats():
+    def get_results():
+        """Outputs a dict containing results of the current model (for the current relation).
+        Ideally, this function should be called each time after a new model has been fit.
+        """
         stats = {}
+        stats['model_name'] = self.model_name
 
         # relation and data information
         stats['Relation'] = self.target_relation
@@ -193,8 +239,8 @@ class Explanator(object):
         # stats['# Triples Valid'] = ??? # we are now using the CV's validation sets
 
         # model parameters
-        stats['alpha']    = self.grid_search.best_params_['alpha'   ]
-        stats['l1_ratio'] = self.grid_search.best_params_['l1_ratio']
+        stats['alpha']    = self.model['alpha'   ] # @TODO: check if this works
+        stats['l1_ratio'] = self.model['l1_ratio'] # @TODO: check if this works
 
         # accuracy
         stats['Test Accuracy']              = self.model.score(self.test_x,  self.test_y)
@@ -234,10 +280,32 @@ class Explanator(object):
         return stats
 
 
+    def train_global_logit(self):
+        """Trains a logistic regression model globally for the current relation.
+        """
+        gs = GridSearchCV(SGDClassifier(), self.param_grid, n_jobs=self.n_jobs)
+        gs.fit(self.train_x, self.train_y)
+        self.model = gs.best_estimator_
+        self.model_name = 'global_logit'
+
+
+    def train_global_regression(self):
+        """Trains a linear regression model globally for the current relation.
+        """
+        # get embedding scores (not labels)
+        train_rels = [self.target_relation] * len(self.train_heads) # list of relations to be passed to `self.emb_predict()`
+        self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
+
+        gs = GridSearchCV(LinearRegression(), self.param_grid, n_jobs=self.n_jobs)
+        # self.model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=self.n_jobs)
+        gs.fit(self.train_x, self.train_y_scores)
+        self.model = gs.best_estimator_
+        self.model_name = 'global_regression'
+
 
 
     def train_local_logit(self, head, tail):
-        """ Train and evaluate the model locally """
+        """Train and evaluate the model locally """
         # Get the nearest neighbors
         _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
         _, tail_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[tail]].reshape(1, -1))
@@ -279,37 +347,16 @@ class Explanator(object):
         x = self.train_x[examples_indices, :]
         x_info = self.train_data.iloc[examples_indices]
 
-        def get_embed_y(row):
-            # Get head, tail and rel IDs
-            head = [self.entity2id[row['head']]]
-            tail = [self.entity2id[row['tail']]]
-            rel = [self.relation2id[self.target_relation]]
-            predict = self.emb_model.test_step(head, tail, rel)
-            return predict
-
-        y = x_info.apply(get_embed_y, axis=1)
+        y = x_info.apply(self.embed_predict, axis=1)
 
         self.regression_model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
         self.regression_model.fit(x, y)
         # Get the features of the test example
         test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
         test_x = self.test_x[test_index, :]
-        test_y = self.test_data.iloc[test_index].apply(get_embed_y, axis=1)
+        test_y = self.test_data.iloc[test_index].apply(self.embed_predict, axis=1)
         prediction = self.regression_model.predict(test_x)[:, 1]
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
-
-
-
-
-    def train(self):
-        """ Train the explainable model.
-        """
-        self.grid_search.fit(self.train_x, self.train_y)
-
-        # best model is accessed through `best_estimator_`
-        self.model = self.grid_search.best_estimator_
-
-
 
 
     def explain_per_example(self, output_path, data_type, n_examples=10):
@@ -349,6 +396,7 @@ class Explanator(object):
         final_reasons.to_csv(output_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv')
         return final_reasons
 
+
     def explain(self):
         """ Explain the model using the coefficients """
         # Extract the coefficients
@@ -362,63 +410,64 @@ class Explanator(object):
 
 
 
-def main(emb_model_path, feat_data_dir, corrupted_data_path):
-    # parser = argparse.Argumentparser()
+def pipeline(emb_model_path, splits=None):
+    """Runs a pipeline for producing explanations with different models for an embedding model.
 
-    # parser.add_argument(
-    #     '--output', '-o',
-    #     type=str,
-    #     default='stats',
-    #     help=''''stats' for relation statistics,
-    #     'per-example' for per-example explanations '''
-    # )
-
-    # args = parser.parse_args()
-
-
-    # data_base_name = 'FB13'
-
-    ### Example of input variables to serve as reference later
-    ## data_path = './results/NELL186/TransE/1524632595/pra_explain/results/g_hat_5nn_5negrate_bern'
-    ## original_data_path = './benchmarks/NELL186'
-    ## corrupted_data_path = './benchmarks/NELL186/corrupted/train2id_bern_2to1.txt'
-    ## target_relations = os.listdir(data_path)
-
-    # emb_model_path = './results/NELL186/TransE/1524632595/'
-    # feat_data_dir = 'g_hat_5nn_5negrate_bern'
-    # corrupted_data_path = ???
-    data_path   = emb_model_path + '/pra_explain/results/'           + feat_data_dir # hardcoded, for now extracted features will always be in `pra_explain/results`
-    output_path = emb_model_path + '/pra_explain/results_explained/' + feat_data_dir
-
-    target_relations = os.listdir(data_path)
+    Arguments:
+    - `emb_model_path`: (string) path to the embedding model directory.
+    - `splits`: (list) directory names (inside `/pra_explain/results`) for which the pipeline
+                       should be run.
+    """
+    # read model information
     model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
-    dataset_name = model_info['dataset_name']
-    ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name']
+    ground_truth_dataset_dpath = './benchmarks/' + model_info['dataset_name']
 
+    # define directory path variables
+    pra_results_path  = emb_model_path + '/pra_explain/results/'
+    expl_results_path = emb_model_path + '/pra_explain/results_explained/'
+    ensure_dir(expl_results_path)
 
+    # get a list of splits (different feature extractions, e.g., using G and G_hat) to run if not provided
+    if splits == None:
+        splits = get_dirs(pra_results_path)
 
+    # instantiate Explanator for this model
+    expl = Explanator(emb_model_path, ground_truth_dataset_path)
 
+    for split in splits:
 
-    relations_info = []
-    target_relations = ['nationality'] # for debugging purposes
-    for target_relation in target_relations:
-        print("Training on " + target_relation + " relations")
-        exp = Explanator(emb_model_path, ground_truth_dataset_path, target_relation, data_path)
-        if exp.read_data():
-            exp.train_local_regression("john_forsyth", "roman_empire")
-            # exp.train():
-            # print('    Generating explanation')
-            # exp.explain()
-            # print('    Generating report')
-            # exp.report()
-            # print('    Saving to csv')
-            # exp.append_to_dataframe()
-            ### # exp.export_dataframe(data_path + data_base_name + '.csv')
-            relations_info.append(exp.get_stats())
-            # print('    Generating per-example explanations')
-            # exp.explain_per_example(data_path, 'test')
-        else:
-            print("No test data for relation `{}`.".format(target_relation))
+        split_path  = os.path.join(pra_results_path,  split)
+        output_path = os.path.join(expl_results_path, split)
+        ensure_dir(output_path)
 
-    # save relations info somewhere
-    pd.DataFrame(relations_info).to_csv(output_path + 'overall_info.tsv', sep='\t')
+        target_relations = get_dirs(split_path) # get a list of target relations
+        results = []
+
+        target_relations = ['nationality'] # for debugging purposes
+        for target_relation in target_relations:
+            print("Loading data for `{}`...".format(target_relation))
+
+            if expl.load_data(split_path, target_relation):
+
+                # global logit
+                expl.train_global_logit()
+                expl.explain()
+                expl.explain_per_example(data_path, 'test')
+                results.append(expl.get_results())
+
+                # global regression
+                expl.train_global_regression()
+                # ...
+
+                # local logit
+                # expl.train_local_logit()
+                # ...
+
+                # local regression
+                # expl.train_local_regression()
+                # ...
+            else:
+                print("Could not load data for `{}`. Skipping relation...".format(target_relation))
+
+        # save overall results
+        pd.DataFrame(results).to_csv(output_path + '/overall_results.tsv', sep='\t')
