@@ -1,24 +1,49 @@
 from __future__ import division
-import argparse
+import os
+import time
 import itertools
 import multiprocessing
 import numpy as np
-import os
 import pandas as pd
+from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import SGDClassifier, LogisticRegressionCV, LinearRegression
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
-import time
+from sklearn.feature_extraction import DictVectorizer
 
 import config, models
-# from tools.feature_matrices import parse_matrices_for_relation
-from tools.feature_matrices import parse_feature_matrix
 from tools import dataset_tools, train_test
+# from tools.feature_matrices import parse_feature_matrix
 
 ### --------------------------------------------------------------------------
 ### --------------------------------------------------------------------------
+
+def parse_feature_matrix(filepath):
+    """Returns four objects: three lists (of heads, tails and labels) and a sparse matrix (of
+    features) for the input (a path to a feature matrix file).
+    """
+    heads = []
+    tails = []
+    labels = []
+    feat_dicts = []
+    with open(filepath, 'r') as f:
+        for line in f:
+            ent_pair, label, features = line.rstrip().split('\t')
+            head, tail = ent_pair.split(',')
+            d = {}
+            for feat in features.split(' -#- '):
+                feat_name, value = feat.split(',')
+                d[feat_name] = float(value)
+
+            heads.append(head)
+            tails.append(tail)
+            labels.append(int(label))
+            feat_dicts.append(d)
+
+    return heads, tails, labels, feat_dicts
+
 
 def get_dirs(dirpath):
     """Same as `os.listdir()` but ensures that only directories will be returned.
@@ -65,21 +90,26 @@ def get_reasons(row, n=10):
 
 class Explanator(object):
     def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=4):
-        self.emb_model_path
+        self.emb_model_path = emb_model_path
         self.ground_truth_dataset_path = ground_truth_dataset_path
         self.n_jobs = n_jobs
-        self.param_grid = [{
+        self.param_grid_logit = [{
             'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
             'alpha': [0.01, 0.001, 0.0001],
-            'loss': "log",
-            'penalty': "elasticnet",
-            'max_iter': 100000,
-            'tol': 1e-3,
-            'class_weight': "balanced",
-            'n_jobs': 4,
+            'loss': ["log"],
+            'penalty': ["elasticnet"],
+            'max_iter': [100000],
+            'tol': [1e-3],
+            'class_weight': ["balanced"],
+            'n_jobs': [n_jobs],
         }]
-        self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(dataset_path,'entity2id.txt'))
-        self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(dataset_path, 'relation2id.txt'))
+        self.param_grid_regression = [{
+            'fit_intercept': [True, False],
+            'normalize': [False, True],
+            'n_jobs': [n_jobs],
+        }]
+        self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path,'entity2id.txt'))
+        self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path, 'relation2id.txt'))
 
 
     def emb_predict(heads, tails, rels, batch_size=10000):
@@ -165,8 +195,8 @@ class Explanator(object):
             # we merge validation with training data, because the GridSearchCV creates the valid split automatically
             self.train_heads += valid_heads
             self.train_tails += valid_tails
-            self.train_x = np.concatenate((self.train_x, self.valid_x), axis=0)
-            self.train_y = np.concatenate((self.train_y, self.valid_y), axis=0)
+            self.train_y     += valid_y
+            self.train_x      = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
 
         # read test data (always present)
         self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
@@ -275,7 +305,10 @@ class Explanator(object):
         stats['Test Embedding Accuracy']    = self.test_y[ self.test_y == self.test_true_y  ].shape[0]/self.test_y.shape[0]
 
         # relevant features
-        stats['# Relevant Features'] = self.explanation[self.explanation['scores'] != 0].shape[0]
+        stats['# Relevant Features'] = self.explanation[self.explanation['weights'] != 0].shape[0]
+        # NOTE: in the future this should be changed, just because a feature has weight different
+        #       than zero it doesn't necessarily mean that it is relevant. We must find a way to
+        #       define this "relevance" formally.
 
         return stats
 
@@ -283,7 +316,7 @@ class Explanator(object):
     def train_global_logit(self):
         """Trains a logistic regression model globally for the current relation.
         """
-        gs = GridSearchCV(SGDClassifier(), self.param_grid, n_jobs=self.n_jobs)
+        gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
         gs.fit(self.train_x, self.train_y)
         self.model = gs.best_estimator_
         self.model_name = 'global_logit'
@@ -296,7 +329,7 @@ class Explanator(object):
         train_rels = [self.target_relation] * len(self.train_heads) # list of relations to be passed to `self.emb_predict()`
         self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
 
-        gs = GridSearchCV(LinearRegression(), self.param_grid, n_jobs=self.n_jobs)
+        gs = GridSearchCV(LinearRegression(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
         # self.model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=self.n_jobs)
         gs.fit(self.train_x, self.train_y_scores)
         self.model = gs.best_estimator_
@@ -397,18 +430,31 @@ class Explanator(object):
         return final_reasons
 
 
-    def explain(self):
-        """ Explain the model using the coefficients """
-        # Extract the coefficients
-        self.coefficients = self.model.coef_.reshape(-1,1)
+    def explain_model(self, top_n=10, output_path=None):
+        """Explain the model using the coefficients (weights) that the linear/logistic regression
+        associated to each feature. The explanations is stores in `self.explanation`, a pandas
+        DataFrame with `feature` and `weight` columns, sorted from highest to lowest weight.
+        """
+        self.explanation = pd.DataFrame({
+            'weight': self.model.coef_.reshape(-1,1), # extract coefficients (weights)
+            'feature':   self.feature_names,
+        }).sort_values(by="weight", ascending=False)
 
-        self.explanation = pd.DataFrame(self.coefficients, columns=['scores'])
-        self.explanation['path'] = self.feature_names
-        self.explanation = self.explanation.sort_values(by="scores", ascending=False)
-        explanation = self.explanation[self.explanation['scores'] != 0]
-        self.most_relevant_variables = pd.concat([explanation.iloc[0:10], explanation.iloc[-10:-1]])
+        # remove features whose weight is zero
+        filter = self.explanation[self.explanation['weight'] != 0]
+        # get the top_n relevant features (for both positive and negative weights)
+        self.top_n_relevant_features = pd.concat([filter.iloc[0:top_n], filter.iloc[-top_n:-1]])
+
+        # save explanation if `output_path` provided
+        if output_path:
+            output_dir      = os.path.join(output_path, self.model_name)
+            output_filepath = os.path.join(output_dir,  '{}.tsv'.format(self.target_relation))
+            ensure_dir(output_dir)
+            self.explanation.to_csv(output_filepath, sep='\t')
 
 
+### --------------------------------------------------------------------------
+### --------------------------------------------------------------------------
 
 def pipeline(emb_model_path, splits=None):
     """Runs a pipeline for producing explanations with different models for an embedding model.
@@ -420,7 +466,7 @@ def pipeline(emb_model_path, splits=None):
     """
     # read model information
     model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
-    ground_truth_dataset_dpath = './benchmarks/' + model_info['dataset_name']
+    ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name'].iloc[0]
 
     # define directory path variables
     pra_results_path  = emb_model_path + '/pra_explain/results/'
@@ -451,7 +497,7 @@ def pipeline(emb_model_path, splits=None):
 
                 # global logit
                 expl.train_global_logit()
-                expl.explain()
+                expl.explain_model(output_path=output_path)
                 expl.explain_per_example(data_path, 'test')
                 results.append(expl.get_results())
 
