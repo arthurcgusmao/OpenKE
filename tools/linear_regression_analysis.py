@@ -6,7 +6,7 @@ import numpy as np
 import os
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import SGDClassifier, LogisticRegressionCV, LinearRegression
+from sklearn.linear_model import SGDClassifier, LogisticRegressionCV, LinearRegression, Lasso
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
@@ -274,18 +274,28 @@ class Explanator(object):
             tail = [self.entity2id[row['tail']]]
             rel = [self.relation2id[self.target_relation]]
             predict = self.emb_model.test_step(head, tail, rel)
-            return predict
+            return predict[0]
 
-        y = x_info.apply(get_embed_y, axis=1)
+        x_info['EmbPrediction'] = x_info.apply(get_embed_y, axis=1)
+        y = x_info.pop('EmbPrediction')
 
-        self.regression_model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
-        self.regression_model.fit(x, y)
+        # Define the model
+        param_grid = [
+            {'alpha': [0.1, 0.3, 0.9, 1.0]}
+        ]
+
+        model_definition = Lasso(max_iter=10000,
+                                 fit_intercept=True)
+        grid_search = GridSearchCV(model_definition, param_grid, n_jobs=4)
+
+        grid_search.fit(x, y)
         # Get the features of the test example
         test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
         test_x = self.test_x[test_index, :]
-        test_y = self.test_data.iloc[test_index].apply(get_embed_y, axis=1)
-        prediction = self.regression_model.predict(test_x)[:, 1]
-        print "The triple has been predicted as ", prediction, " when should have been ", test_y
+        self.test_data['EmbPrediction'] = self.test_data.apply(get_embed_y, axis=1)
+        test_y = self.test_data.pop('EmbPrediction')
+        prediction = grid_search.predict(test_x)
+        print "The triple has been predicted as ", prediction, " when should have been ", test_y.iloc[test_index].values
 
     def train(self):
         """ Train and evaluate the model """
