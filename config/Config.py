@@ -7,6 +7,7 @@ import datetime
 import ctypes
 from ctypes import c_float # needed to extract the average accuracy value
 import json
+import models
 
 class Config(object):
 
@@ -312,7 +313,7 @@ class Config(object):
                 self.sess.run(tf.global_variables_initializer())
 
     def set_model_by_name(self, model_name):
-        self.set_model(getattr(models, model_info['model_name']))
+        self.set_model(getattr(models, model_name))
 
     def train_step(self, batch_h, batch_t, batch_r, batch_y):
         feed_dict = {

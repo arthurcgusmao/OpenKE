@@ -69,8 +69,8 @@ def setup_config(model_info):
     con = config.Config()
     dataset_path = "./benchmarks/{}/".format(model_info['dataset_name'])
     con.set_in_path(dataset_path)
-    con.set_test_link_prediction(model_info['test_link_prediction'])
-    con.set_test_triple_classification(model_info['test_triple_class'])
+    if 'test_link_prediction' in model_info: con.set_test_link_prediction(model_info['test_link_prediction'])
+    if 'test_link_prediction' in model_info: con.set_test_triple_classification(model_info['test_triple_class'])
     con.set_log_on(model_info['log_on'], log_type=model_info['log_type'], log_print=model_info['log_print'])
     con.set_train_times(model_info['n_epochs'])
     if 'batch_size' in model_info:
@@ -85,11 +85,11 @@ def setup_config(model_info):
     if 'margin' in model_info: con.set_margin(model_info['margin'])
     if 'regul_weight' in model_info: con.set_lmbda(model_info['regul_weight'])
     if 'score_norm' in model_info: con.score_norm = model_info['score_norm']
-    con.set_ent_neg_rate(model_info['ent_neg_rate'])
-    con.set_rel_neg_rate(model_info['rel_neg_rate'])
+    if 'ent_neg_rate' in model_info: con.set_ent_neg_rate(model_info['ent_neg_rate'])
+    if 'rel_neg_rate' in model_info: con.set_rel_neg_rate(model_info['rel_neg_rate'])
     con.set_opt_method(model_info['opt_method'])
-    con.shuffle = model_info['shuffle']
-    con.set_work_threads(model_info['work_threads'])
+    if 'shuffle' in model_info: con.shuffle = model_info['shuffle']
+    if 'work_threads' in model_info: con.set_work_threads(model_info['work_threads'])
     return con
 
 

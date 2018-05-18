@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import SGDClassifier, LogisticRegressionCV, LinearRegression
+from sklearn.linear_model import SGDClassifier, LinearRegression, Lasso
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
@@ -42,7 +42,14 @@ def parse_feature_matrix(filepath):
             labels.append(int(label))
             feat_dicts.append(d)
 
-    return heads, tails, labels, feat_dicts
+    return np.array(heads), np.array(tails), np.array(labels), feat_dicts
+
+
+def getattr_else_None(class, attr_name):
+    try:
+        attr = getattr(class, attr_name)
+    except AttributeError:
+        attr = None
 
 
 def get_dirs(dirpath):
@@ -88,10 +95,11 @@ def get_reasons(row, n=10):
 ### --------------------------------------------------------------------------
 
 class Explanator(object):
-    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=4):
+    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=4, max_knn_k=100):
         self.emb_model_path = emb_model_path
         self.ground_truth_dataset_path = ground_truth_dataset_path
         self.n_jobs = n_jobs
+        self.max_knn_k = max_knn_k
         self.param_grid_logit = [{
             'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
             'alpha': [0.01, 0.001, 0.0001],
@@ -103,15 +111,17 @@ class Explanator(object):
             'n_jobs': [n_jobs],
         }]
         self.param_grid_regression = [{
+            'alpha': [0.1, 0.3, 0.9, 1.0],
             'fit_intercept': [True, False],
+            'max_iter': [10000],
             'normalize': [False, True],
-            'n_jobs': [n_jobs],
+            # 'n_jobs': [n_jobs], # Lasso does not support this parameter
         }]
         self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path,'entity2id.txt'))
         self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path, 'relation2id.txt'))
 
 
-    def emb_predict(heads, tails, rels, batch_size=10000):
+    def emb_predict(self, heads, tails, rels, batch_size=10000):
         """Get the score for each head, tail and relation. Inputs `heads`, `tails`, and `rels`
         should be names, and not IDs.
         """
@@ -130,17 +140,52 @@ class Explanator(object):
         for i in range(total_iters):
             start = (i) * batch_size
             end = (i+1) * batch_size
-            scores += self.emb_model.test_step(heads2id[start:end], tails2id[start:end], rels2id[start:end])
+            res = self.emb_model.test_step(heads2id[start:end], tails2id[start:end], rels2id[start:end])
+            scores = np.concatenate((scores, res), axis=0)
         return scores
 
 
-    def define_knn(max_knn_k=100):
-        # get the embedding model
-        if not hasattr(self, 'emb_model'):
-            self.emb_model = train_test.restore_model(self.emb_model_path)
+    def get_kneighbors(self, ent):
+        """Returns a (distance, indices) tuple for the k nearest neighbors of an entity, in the
+        embedding vector space.
 
-        self.embed_params = self.emb_model.get_parameters()
-        self.nbrs = NearestNeighbors(n_neighbors=max_knn_k, n_jobs=4).fit(self.embed_params['ent_embeddings'])
+        Arguments:
+        - `ent`: (string) entity name
+        """
+        # create knn instance if necessary
+        if not hasattr(self, 'nbrs'):
+            # create the embedding model if necessary
+            if not hasattr(self, 'emb_model'):
+                self.emb_model = train_test.restore_model(self.emb_model_path)
+
+            self.embed_params = self.emb_model.get_parameters()
+            self.nbrs = NearestNeighbors(n_neighbors=self.max_knn_k, n_jobs=self.n_jobs).fit(self.embed_params['ent_embeddings'])
+
+        # @TODO: check if neighbors have already been found for this entity and then save the results in memory
+        return self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[ent]].reshape(1, -1)) # @TODO: check if this is working
+
+
+    def get_local_train_indices(self, head, tail):
+        """Returns a tuple containing the features and the scores for the nearby examples, for
+        training a local approximation.
+
+        Arguments:
+        - `head`: (string) the head entity name
+        - `tail`: (string) the tail entity name
+        """
+        # get the nearest neighbors
+        _, head_indices = self.get_kneighbors(head)
+        _, tail_indices = self.get_kneighbors(tail)
+
+        # get the corresponding training examples
+        examples_indices = []
+        for head_index in head_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
+        for tail_index in tail_indices[0][1:]:
+            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
+        self.n_nearby_examples = len(examples_indices)
+
+        return examples_indices
 
 
     def load_data(self, split_path, target_relation):
@@ -192,9 +237,9 @@ class Explanator(object):
             valid_heads, valid_tails, valid_y, valid_feat_dicts = parse_feature_matrix(valid_fpath)
             valid_x = v.transform(valid_feat_dicts)
             # we merge validation with training data, because the GridSearchCV creates the valid split automatically
-            self.train_heads += valid_heads
-            self.train_tails += valid_tails
-            self.train_y     += valid_y
+            self.train_heads += np.concatenate((self.train_heads, valid_heads))
+            self.train_tails += np.concatenate((self.train_tails, valid_tails))
+            self.train_y     += np.concatenate((self.train_y,     valid_y    ))
             self.train_x      = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
 
         # read test data (always present)
@@ -254,7 +299,7 @@ class Explanator(object):
             self.test_true_y.append(1 if matches > 0 else -1)
 
 
-    def get_results():
+    def get_results(self):
         """Outputs a dict containing results of the current model (for the current relation).
         Ideally, this function should be called each time after a new model has been fit.
         """
@@ -268,8 +313,16 @@ class Explanator(object):
         # stats['# Triples Valid'] = ??? # we are now using the CV's validation sets
 
         # model parameters
-        stats['alpha']    = self.model['alpha'   ] # @TODO: check if this works
-        stats['l1_ratio'] = self.model['l1_ratio'] # @TODO: check if this works
+        stats['alpha']             = getattr_else_None(self.model, 'alpha'            ) # @TODO: check if this works
+        stats['l1_ratio']          = getattr_else_None(self.model, 'l1_ratio'         )
+        stats['loss']              = getattr_else_None(self.model, 'loss'             )
+        stats['penalty']           = getattr_else_None(self.model, 'penalty'          )
+        stats['max_iter']          = getattr_else_None(self.model, 'max_iter'         )
+        stats['tol']               = getattr_else_None(self.model, 'tol'              )
+        stats['class_weight']      = getattr_else_None(self.model, 'class_weight'     )
+        stats['fit_intercept']     = getattr_else_None(self.model, 'fit_intercept'    )
+        stats['normalize']         = getattr_else_None(self.model, 'normalize'        )
+        stats['n_nearby_examples'] = getattr_else_None(self,       'n_nearby_examples')
 
         # accuracy
         stats['Test Accuracy']              = self.model.score(self.test_x,  self.test_y)
@@ -328,31 +381,30 @@ class Explanator(object):
         train_rels = [self.target_relation] * len(self.train_heads) # list of relations to be passed to `self.emb_predict()`
         self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
 
-        gs = GridSearchCV(LinearRegression(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
-        # self.model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=self.n_jobs)
+        # train regression
+        gs = GridSearchCV(Lasso(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
         gs.fit(self.train_x, self.train_y_scores)
         self.model = gs.best_estimator_
         self.model_name = 'global_regression'
 
 
-
     def train_local_logit(self, head, tail):
-        """Train and evaluate the model locally """
-        # Get the nearest neighbors
-        _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
-        _, tail_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[tail]].reshape(1, -1))
-        # Get all the corresponding training examples
-        examples_indices = []
-        for head_index in head_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
-        for tail_index in tail_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
-        examples_indices = sorted(examples_indices)
-        # Train a logit on those examples
-        print "Training with ", len(examples_indices)
-        x = self.train_x[examples_indices, :]
-        y = self.train_y.iloc[examples_indices]
-        self.model_definition.fit(x, y)
+        # @TODO: adapt this function to new code
+        """Train and evaluate the model locally
+        """
+        # get local indices
+        examples_indices = self.get_local_train_data(head, tail)
+
+        # get features and labels
+        train_x_local = self.train_x[examples_indices, :]
+        train_y_local = self.train_y[examples_indices, :]
+
+        # train local logit
+        gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
+        gs.fit(self.train_x, self.train_y)
+        self.model = gs.best_estimator_
+        self.model_name = 'global_logit'
+
         # Get the features of the test example
         test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
         print "INDEX ", test_index
@@ -363,26 +415,24 @@ class Explanator(object):
 
 
     def train_local_regression(self, head, tail):
-        """ Train and evaluate the model locally """
-        # Get the nearest neighbors
-        _, head_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[head]].reshape(1, -1))
-        _, tail_indices = self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[tail]].reshape(1, -1))
-        # Get all the corresponding training examples
-        examples_indices = []
-        for head_index in head_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
-        for tail_index in tail_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
+        """Train a linear regression model locally for the current relation and head and tail entities.
+        """
+        # get local indices
+        examples_indices = self.get_local_train_data(head, tail)
 
-        # Train a logit on those examples
-        print "Training with ", len(examples_indices)
-        x = self.train_x[examples_indices, :]
-        x_info = self.train_data.iloc[examples_indices]
+        # get features and scores
+        train_x_local = self.train_x[examples_indices, :]
+        train_y_scores_local = self.emb_predict(
+                self.train_heads[examples_indices],
+                self.train_tails[examples_indices],
+                [self.target_relation] * len(examples_indices))
 
-        y = x_info.apply(self.embed_predict, axis=1)
+        # train regression
+        gs = GridSearchCV(Lasso(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
+        gs.fit(train_x_local, train_y_scores_local)
+        self.model = gs.best_estimator_
+        self.model_name = 'global_regression'
 
-        self.regression_model = LinearRegression(fit_intercept=True, normalize=False, copy_X=True, n_jobs=8)
-        self.regression_model.fit(x, y)
         # Get the features of the test example
         test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
         test_x = self.test_x[test_index, :]
@@ -431,8 +481,11 @@ class Explanator(object):
 
     def explain_model(self, top_n=10, output_path=None):
         """Explain the model using the coefficients (weights) that the linear/logistic regression
-        associated to each feature. The explanations is stores in `self.explanation`, a pandas
+        associated to each feature. The explanations are stored in `self.explanation`, a pandas
         DataFrame with `feature` and `weight` columns, sorted from highest to lowest weight.
+
+        If `output_path` is provided, then the method will export the DataFrame as tsv to a folder
+        with the same name of the current model in `output_path`.
         """
         self.explanation = pd.DataFrame({
             'weight': self.model.coef_.reshape(-1), # extract coefficients (weights)
@@ -497,20 +550,26 @@ def pipeline(emb_model_path, splits=None):
                 # global logit
                 expl.train_global_logit()
                 expl.explain_model(output_path=output_path)
-                expl.explain_per_example(data_path, 'test')
+                # expl.explain_per_example(data_path, 'test')
                 results.append(expl.get_results())
 
                 # global regression
                 expl.train_global_regression()
-                # ...
+                expl.explain_model(output_path=output_path)
+                # expl.explain_per_example(data_path, 'test')
+                results.append(expl.get_results())
 
                 # local logit
-                # expl.train_local_logit()
-                # ...
+                expl.train_local_logit()
+                expl.explain_model(output_path=output_path)
+                # expl.explain_per_example(data_path, 'test')
+                results.append(expl.get_results())
 
                 # local regression
-                # expl.train_local_regression()
-                # ...
+                expl.train_local_regression()
+                expl.explain_model(output_path=output_path)
+                # expl.explain_per_example(data_path, 'test')
+                results.append(expl.get_results())
             else:
                 print("Could not load data for `{}`. Skipping relation...".format(target_relation))
 
