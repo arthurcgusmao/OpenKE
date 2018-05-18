@@ -17,79 +17,7 @@ import config, models
 from tools import dataset_tools, train_test
 # from tools.feature_matrices import parse_feature_matrix
 
-### --------------------------------------------------------------------------
-### --------------------------------------------------------------------------
-
-def parse_feature_matrix(filepath):
-    """Returns four objects: three lists (of heads, tails and labels) and a sparse matrix (of
-    features) for the input (a path to a feature matrix file).
-    """
-    heads = []
-    tails = []
-    labels = []
-    feat_dicts = []
-    with open(filepath, 'r') as f:
-        for line in f:
-            ent_pair, label, features = line.rstrip().split('\t')
-            head, tail = ent_pair.split(',')
-            d = {}
-            for feat in features.split(' -#- '):
-                feat_name, value = feat.split(',')
-                d[feat_name] = float(value)
-
-            heads.append(head)
-            tails.append(tail)
-            labels.append(int(label))
-            feat_dicts.append(d)
-
-    return np.array(heads), np.array(tails), np.array(labels), feat_dicts
-
-
-def getattr_else_None(class, attr_name):
-    try:
-        attr = getattr(class, attr_name)
-    except AttributeError:
-        attr = None
-
-
-def get_dirs(dirpath):
-    """Same as `os.listdir()` but ensures that only directories will be returned.
-    """
-    dirs = []
-    for f in os.listdir(dirpath):
-        f_path = os.path.join(dirpath, f)
-        if os.path.isdir(f_path):
-            dirs.append(f)
-    return dirs
-
-
-def ensure_dir(dirpath):
-    """Creates the directory if it does not exist.
-    """
-    if not os.path.exists(dirpath):
-        os.makedirs(dirpath)
-
-
-def get_reasons(row, n=10):
-    # Remove zero elements
-    reasons = row[row != 0]
-    # Select the top n_examples elements
-    top_reasons_abs = reasons.abs().nlargest(n=n, keep='first')
-    # Create a pandas series with these
-    output = pd.Series()
-    counter = 1
-    for reason, _ in top_reasons_abs.iteritems():
-        reason_name, _ = reason.split('=')
-        output['reason' + str(counter)] = reason_name
-        output['relevance' + str(counter)] = reasons[reason]
-        counter = counter + 1
-        if counter == n:
-            break
-    for i in range(counter, n):
-        output['reason' + str(i)] = "n/a"
-        output['relevance' + str(i)] = "n/a"
-    return output
-
+from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_dir, get_reasons
 
 ### --------------------------------------------------------------------------
 ### --------------------------------------------------------------------------
@@ -165,29 +93,6 @@ class Explanator(object):
         return self.nbrs.kneighbors(self.embed_params['ent_embeddings'][self.entity2id[ent]].reshape(1, -1)) # @TODO: check if this is working
 
 
-    def get_local_train_indices(self, head, tail):
-        """Returns a tuple containing the features and the scores for the nearby examples, for
-        training a local approximation.
-
-        Arguments:
-        - `head`: (string) the head entity name
-        - `tail`: (string) the tail entity name
-        """
-        # get the nearest neighbors
-        _, head_indices = self.get_kneighbors(head)
-        _, tail_indices = self.get_kneighbors(tail)
-
-        # get the corresponding training examples
-        examples_indices = []
-        for head_index in head_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
-        for tail_index in tail_indices[0][1:]:
-            examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
-        self.n_nearby_examples = len(examples_indices)
-
-        return examples_indices
-
-
     def load_data(self, split_path, target_relation):
         """Read embedding predicted data for the target relation from the split (i.e., from data
         whose features were extracted and whose labels are predictions from the embedding model).
@@ -252,7 +157,6 @@ class Explanator(object):
             return False
 
         return True
-
 
 
     def load_ground_truth_labels(self, dataset_path, target_relation):
@@ -388,20 +292,15 @@ class Explanator(object):
         self.model_name = 'global_regression'
 
 
-    def train_local_logit(self, head, tail):
+    def train_local_logit(self, head, tail, get_local_data_func):
         # @TODO: adapt this function to new code
         """Train and evaluate the model locally
         """
-        # get local indices
-        examples_indices = self.get_local_train_data(head, tail)
-
-        # get features and labels
-        train_x_local = self.train_x[examples_indices, :]
-        train_y_local = self.train_y[examples_indices, :]
+        local_data = get_local_data_func(self, head, tail, y_type='labels')
 
         # train local logit
         gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
-        gs.fit(self.train_x, self.train_y)
+        gs.fit(local_data['x'], local_data['y'])
         self.model = gs.best_estimator_
         self.model_name = 'global_logit'
 
@@ -414,22 +313,14 @@ class Explanator(object):
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
 
-    def train_local_regression(self, head, tail):
+    def train_local_regression(self, head, tail, get_local_data_func):
         """Train a linear regression model locally for the current relation and head and tail entities.
         """
-        # get local indices
-        examples_indices = self.get_local_train_data(head, tail)
-
-        # get features and scores
-        train_x_local = self.train_x[examples_indices, :]
-        train_y_scores_local = self.emb_predict(
-                self.train_heads[examples_indices],
-                self.train_tails[examples_indices],
-                [self.target_relation] * len(examples_indices))
+        local_data = get_local_data_func(self, head, tail, y_type='scores')
 
         # train regression
         gs = GridSearchCV(Lasso(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
-        gs.fit(train_x_local, train_y_scores_local)
+        gs.fit(local_data['x'], local_data['y'])
         self.model = gs.best_estimator_
         self.model_name = 'global_regression'
 
@@ -503,75 +394,3 @@ class Explanator(object):
             output_filepath = os.path.join(output_dir,  '{}.tsv'.format(self.target_relation))
             ensure_dir(output_dir)
             self.explanation.to_csv(output_filepath, sep='\t', columns=['weight', 'feature'], index=False)
-
-
-### --------------------------------------------------------------------------
-### --------------------------------------------------------------------------
-
-def pipeline(emb_model_path, splits=None):
-    """Runs a pipeline for producing explanations with different models for an embedding model.
-
-    Arguments:
-    - `emb_model_path`: (string) path to the embedding model directory.
-    - `splits`: (list) directory names (inside `/pra_explain/results`) for which the pipeline
-                       should be run.
-    """
-    # read model information
-    model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
-    ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name'].iloc[0]
-
-    # define directory path variables
-    pra_results_path  = emb_model_path + '/pra_explain/results/'
-    expl_results_path = emb_model_path + '/pra_explain/results_explained/'
-    ensure_dir(expl_results_path)
-
-    # get a list of splits (different feature extractions, e.g., using G and G_hat) to run if not provided
-    if splits == None:
-        splits = get_dirs(pra_results_path)
-
-    # instantiate Explanator for this model
-    expl = Explanator(emb_model_path, ground_truth_dataset_path)
-
-    for split in splits:
-
-        split_path  = os.path.join(pra_results_path,  split)
-        output_path = os.path.join(expl_results_path, split)
-        ensure_dir(output_path)
-
-        target_relations = get_dirs(split_path) # get a list of target relations
-        results = []
-
-        target_relations = ['nationality'] # for debugging purposes
-        for target_relation in target_relations:
-            print("Loading data for `{}`...".format(target_relation))
-
-            if expl.load_data(split_path, target_relation):
-
-                # global logit
-                expl.train_global_logit()
-                expl.explain_model(output_path=output_path)
-                # expl.explain_per_example(data_path, 'test')
-                results.append(expl.get_results())
-
-                # global regression
-                expl.train_global_regression()
-                expl.explain_model(output_path=output_path)
-                # expl.explain_per_example(data_path, 'test')
-                results.append(expl.get_results())
-
-                # local logit
-                expl.train_local_logit()
-                expl.explain_model(output_path=output_path)
-                # expl.explain_per_example(data_path, 'test')
-                results.append(expl.get_results())
-
-                # local regression
-                expl.train_local_regression()
-                expl.explain_model(output_path=output_path)
-                # expl.explain_per_example(data_path, 'test')
-                results.append(expl.get_results())
-            else:
-                print("Could not load data for `{}`. Skipping relation...".format(target_relation))
-
-        # save overall results
-        pd.DataFrame(results).to_csv(output_path + '/overall_results.tsv', sep='\t')
