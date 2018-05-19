@@ -55,7 +55,7 @@ def restore_model(import_path):
     con = setup_config(model_info)
     con.init()
     con.set_model_by_name(model_info['model_name'])
-    con.import_variables("{}tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
+    con.import_variables("{}/tf_model/model.vec.tf".format(import_path)) # loading model via tensor library
     return con
 
 
@@ -125,6 +125,8 @@ def pipeline(model_info):
             os.makedirs(directory)
     ensure_dir(export_path + '/') # without the "/" in the end the path wasn't being created
     print("Model will be exported to {}. \n".format(export_path))
+    def save_model_info():
+        pd.DataFrame([model_info]).to_csv('{}/model_info.tsv'.format(export_path), sep='\t')
 
     # export model parameters
     con.set_export_files("{}/tf_model/model.vec.tf".format(export_path))
@@ -139,6 +141,7 @@ def pipeline(model_info):
     learning_curve = pd.DataFrame(con.log['training_curve'])
     learning_curve.to_csv("{}/learning_curve.tsv".format(export_path), sep='\t')
     model_info['learning_time'] = con.log['learning_time']
+    save_model_info()
     print('\nModel was trained in {} seconds'.format(model_info['learning_time']))
 
 
@@ -170,14 +173,7 @@ def pipeline(model_info):
 
     model_info['testing_time'] = con.log['testing_time']
     print('Model was tested in {} seconds'.format(model_info['testing_time']))
-
-
-    # Save model info
-    # ---------------
-
-    # save model_info DataFrame
-    pd.DataFrame([model_info]).to_csv('{}/model_info.tsv'.format(export_path), sep='\t')
-
+    save_model_info()
 
 
 

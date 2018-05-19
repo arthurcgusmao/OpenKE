@@ -34,12 +34,12 @@ class TransE(Model):
 		pos_h, pos_t, pos_r = self.get_positive_instance(in_batch = True)
 		neg_h, neg_t, neg_r = self.get_negative_instance(in_batch = True)
 		#Embedding entities and relations of triples, e.g. p_h, p_t and p_r are embeddings for positive triples
-		p_h = tf.nn.embedding_lookup(self.ent_embeddings, pos_h)
-		p_t = tf.nn.embedding_lookup(self.ent_embeddings, pos_t)
-		p_r = tf.nn.embedding_lookup(self.rel_embeddings, pos_r)
-		n_h = tf.nn.embedding_lookup(self.ent_embeddings, neg_h)
-		n_t = tf.nn.embedding_lookup(self.ent_embeddings, neg_t)
-		n_r = tf.nn.embedding_lookup(self.rel_embeddings, neg_r)
+		p_h = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, pos_h), 1, axes=-1)
+		p_t = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, pos_t), 1, axes=-1)
+		p_r = tf.clip_by_norm(tf.nn.embedding_lookup(self.rel_embeddings, pos_r), 1, axes=-1)
+		n_h = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, neg_h), 1, axes=-1)
+		n_t = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, neg_t), 1, axes=-1)
+		n_r = tf.clip_by_norm(tf.nn.embedding_lookup(self.rel_embeddings, neg_r), 1, axes=-1)
 		#Calculating score functions for all positive triples and negative triples
 		#The shape of _p_score is (batch_size, 1, hidden_size)
 		#The shape of _n_score is (batch_size, negative_ent + negative_rel, hidden_size)

@@ -41,12 +41,12 @@ class TransD(Model):
 		pos_h, pos_t, pos_r = self.get_positive_instance(in_batch = True)
 		neg_h, neg_t, neg_r = self.get_negative_instance(in_batch = True)
 		#Embedding entities and relations of triples, e.g. pos_h_e, pos_t_e and pos_r_e are embeddings for positive triples
-		pos_h_e = tf.nn.embedding_lookup(self.ent_embeddings, pos_h)
-		pos_t_e = tf.nn.embedding_lookup(self.ent_embeddings, pos_t)
-		pos_r_e = tf.nn.embedding_lookup(self.rel_embeddings, pos_r)
-		neg_h_e = tf.nn.embedding_lookup(self.ent_embeddings, neg_h)
-		neg_t_e = tf.nn.embedding_lookup(self.ent_embeddings, neg_t)
-		neg_r_e = tf.nn.embedding_lookup(self.rel_embeddings, neg_r)
+		pos_h_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, pos_h), 1, axes=-1)
+		pos_t_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, pos_t), 1, axes=-1)
+		pos_r_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.rel_embeddings, pos_r), 1, axes=-1)
+		neg_h_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, neg_h), 1, axes=-1)
+		neg_t_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.ent_embeddings, neg_t), 1, axes=-1)
+		neg_r_e = tf.clip_by_norm(tf.nn.embedding_lookup(self.rel_embeddings, neg_r), 1, axes=-1)
 		#Getting the required parameters to transfer entity embeddings, e.g. pos_h_t, pos_t_t and pos_r_t are transfer parameters for positive triples
 		pos_h_t = tf.nn.embedding_lookup(self.ent_transfer, pos_h)
 		pos_t_t = tf.nn.embedding_lookup(self.ent_transfer, pos_t)
@@ -55,11 +55,11 @@ class TransD(Model):
 		neg_t_t = tf.nn.embedding_lookup(self.ent_transfer, neg_t)
 		neg_r_t = tf.nn.embedding_lookup(self.rel_transfer, neg_r)
 		#Calculating score functions for all positive triples and negative triples
-		p_h = self._transfer(pos_h_e, pos_h_t, pos_r_t)
-		p_t = self._transfer(pos_t_e, pos_t_t, pos_r_t)
+		p_h = tf.clip_by_norm(self._transfer(pos_h_e, pos_h_t, pos_r_t), 1, axes=-1)
+		p_t = tf.clip_by_norm(self._transfer(pos_t_e, pos_t_t, pos_r_t), 1, axes=-1)
 		p_r = pos_r_e
-		n_h = self._transfer(neg_h_e, neg_h_t, neg_r_t)
-		n_t = self._transfer(neg_t_e, neg_t_t, neg_r_t)
+		n_h = tf.clip_by_norm(self._transfer(neg_h_e, neg_h_t, neg_r_t), 1, axes=-1)
+		n_t = tf.clip_by_norm(self._transfer(neg_t_e, neg_t_t, neg_r_t), 1, axes=-1)
 		n_r = neg_r_e
 		#The shape of _p_score is (batch_size, 1, hidden_size)
 		#The shape of _n_score is (batch_size, negative_ent + negative_rel, hidden_size)

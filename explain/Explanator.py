@@ -293,8 +293,7 @@ class Explanator(object):
 
 
     def train_local_logit(self, head, tail, get_local_data_func):
-        # @TODO: adapt this function to new code
-        """Train and evaluate the model locally
+        """Train a logistic regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='labels')
 
