@@ -17,7 +17,7 @@ train_test.grid_search({
 
     ### OPTIONAL or MODEL DEPENDENT hyperparameters
     ### -------------------------------------------
-    # 'margin'                     : 1.0,  # for most models
+    'margin'                     : 1.0,  # for most models
     'score_norm'                 : 'l2', # for TransX models
     # 'embedding_initialization'   : 'TransE/1524490825', # initialize parameters from another model
     # 'regul_weight'               : 0.001, # the regularization weight in the loss function
@@ -44,4 +44,7 @@ train_test.grid_search({
     ### GPU and CPU settings
     # 'work_threads'    : multiprocessing.cpu_count(), # (defaults to multiprocessing.cpu_count())
     # 'cuda_device'     : 0, # (no default value -- not necessary)
+
+    ### NOTES
+    # 'note': ''
 })
