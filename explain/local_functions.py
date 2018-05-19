@@ -5,6 +5,9 @@ The idea is that we experiment with many different ways of getting examples in t
 easier to understand.
 """
 
+import numpy as np
+
+
 def get_local_train_data(self, head, tail, y_type="labels"):
     """Returns a dict containing the features and the labels/scores for the nearby examples, for
     training a local approximation.
@@ -19,12 +22,17 @@ def get_local_train_data(self, head, tail, y_type="labels"):
     _, head_indices = self.get_kneighbors(head)
     _, tail_indices = self.get_kneighbors(tail)
 
+    # Get index for the target relation
+    head_ix = np.where(self.test_heads == head)[0]
+    tail_ix = np.where(self.test_tails == tail)[0]
+    index = list(set(head_ix).intersection(tail_ix))
+
     # get the corresponding training examples
     examples_indices = []
     for head_id in head_indices[0][1:]:
-        examples_indices.extend(np.where(self.train_heads == self.id2entity[head_id]))
+        examples_indices.extend(np.where(self.train_heads == self.id2entity[head_id])[0])
     for tail_id in tail_indices[0][1:]:
-        examples_indices.extend(np.where(self.train_tails == self.id2entity[tail_id]))
+        examples_indices.extend(np.where(self.train_tails == self.id2entity[tail_id])[0])
     self.n_nearby_examples = len(examples_indices)
 
     # get features
@@ -42,4 +50,5 @@ def get_local_train_data(self, head, tail, y_type="labels"):
     return {
         'x': train_x_local,
         'y': train_y_local,
+        'index': index
     }

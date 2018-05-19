@@ -142,9 +142,9 @@ class Explanator(object):
             valid_heads, valid_tails, valid_y, valid_feat_dicts = parse_feature_matrix(valid_fpath)
             valid_x = v.transform(valid_feat_dicts)
             # we merge validation with training data, because the GridSearchCV creates the valid split automatically
-            self.train_heads += np.concatenate((self.train_heads, valid_heads))
-            self.train_tails += np.concatenate((self.train_tails, valid_tails))
-            self.train_y     += np.concatenate((self.train_y,     valid_y    ))
+            self.train_heads = np.concatenate((self.train_heads, valid_heads))
+            self.train_tails = np.concatenate((self.train_tails, valid_tails))
+            self.train_y     = np.concatenate((self.train_y,     valid_y    ))
             self.train_x      = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
 
         # read test data (always present)
@@ -155,6 +155,8 @@ class Explanator(object):
         if len(np.unique(self.train_y)) <= 1:
             print("Not possible to train explainable model in relation `{}` because training set contains a single class.".format(target_relation))
             return False
+
+        # self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
 
         return True
 
@@ -168,15 +170,15 @@ class Explanator(object):
         for having the corrupted data path (that may change from model to model).
         """
         # these files have no labels, they are all positive instances
-        gt_train2id = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
-        gt_valid2id = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
-        gt_test2id  = pd.read_csv(os.path.join(dataset_path, 'test2id.txt' ), skiprows=1, sep=' ', columns=['head', 'tail', 'relation'])
+        gt_train2id = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
+        gt_valid2id = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
+        gt_test2id  = pd.read_csv(os.path.join(dataset_path, 'test2id.txt' ), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
 
         # merge train and validation data
         gt_train2id = pd.concat((gt_train2id, gt_valid2id))
 
         # get id of target relation
-        target_relation_id = relation2id[target_relation]
+        target_relation_id = self.relation2id[target_relation]
 
         # filter data to get only triples whose relation is the target relation
         gt_train2id_filt = gt_train2id.loc[gt_train2id['relation'] == target_relation_id]
@@ -324,10 +326,13 @@ class Explanator(object):
         self.model_name = 'global_regression'
 
         # Get the features of the test example
-        test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
-        test_x = self.test_x[test_index, :]
-        test_y = self.test_data.iloc[test_index].apply(self.embed_predict, axis=1)
-        prediction = self.regression_model.predict(test_x)[:, 1]
+        test_index = local_data['index']
+        print test_index, type(test_index)
+        test_x = self.test_x[test_index]
+        test_y = self.test_y[test_index]
+        prediction = self.model.predict(test_x)
+        print(prediction)
+        self.explain_single_example(test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
 
@@ -336,15 +341,15 @@ class Explanator(object):
         if data_type == 'train':
             x = self.train_x
             y_hat = self.train_y
-            y = self.true_train_y
-            data = self.train_data
-        elif self.test_exists:
+            y = self.train_true_y
+            heads = self.train_heads
+            tails = self.train_tails
+        else:
             x = self.test_x
             y_hat = self.test_y
-            y = self.true_test_y
-            data = self.test_data
-        else:
-            return ''
+            y = self.test_true_y
+            heads = self.test_heads
+            tails = self.test_tails
         # Define the maximum number of examples
         n_examples = min(n_examples, x.shape[0])
         # Select n_examples samples
@@ -359,14 +364,26 @@ class Explanator(object):
         examples_df.columns = self.feature_names
 
         final_reasons = examples_df.apply(get_reasons, axis=1)
-        final_reasons['head'] = data.iloc[index]['head'].values
-        final_reasons['tail'] = data.iloc[index]['tail'].values
+        final_reasons['head'] = heads[index]
+        final_reasons['tail'] = tails[index]
         answers = self.model.predict_proba(features)[:, 1]
         final_reasons['y_logit'] = answers
         final_reasons['y_hat'] = y_hat
         final_reasons['y'] = y
-        final_reasons.to_csv(output_path  + '/' + self.target_relation + '/' + self.target_relation + '.csv')
+        final_reasons.to_csv(os.path.join(output_path, self.target_relation + '.tsv'), sep='\t')
         return final_reasons
+
+
+    def explain_single_example(self, features, coefficients, head, tail, y, y_hat, y_logit):
+        explanations = np.multiply(features, coefficients.T)
+        example_df = pd.DataFrame(explanations, columns=self.feature_names)
+        final_reasons = example_df.apply(get_reasons, axis=1)
+        final_reasons['head'] = head
+        final_reasons['tail'] = tail
+        final_reasons['y_logit'] = y_logit
+        final_reasons['y_hat'] = y_hat
+        final_reasons['y'] = y
+        final_reasons.to_csv(os.path.join(output_path, self.target_relation, head + '_' + tail + '.tsv'), sep='\t')
 
 
     def explain_model(self, top_n=10, output_path=None):
