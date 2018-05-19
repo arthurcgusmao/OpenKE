@@ -27,9 +27,9 @@ def parse_feature_matrix(filepath):
     return np.array(heads), np.array(tails), np.array(labels), feat_dicts
 
 
-def getattr_else_None(class, attr_name):
+def getattr_else_None(class_, attr_name):
     try:
-        attr = getattr(class, attr_name)
+        attr = getattr(class_, attr_name)
     except AttributeError:
         attr = None
 
@@ -61,8 +61,7 @@ def get_reasons(row, n=10):
     output = pd.Series()
     counter = 1
     for reason, _ in top_reasons_abs.iteritems():
-        reason_name, _ = reason.split('=')
-        output['reason' + str(counter)] = reason_name
+        output['reason' + str(counter)] = reason
         output['relevance' + str(counter)] = reasons[reason]
         counter = counter + 1
         if counter == n:

@@ -40,7 +40,7 @@ def get_local_train_data(self, head, tail, y_type="labels"):
 
     # get labels or scores
     if y_type == 'labels':
-        train_y_local = self.train_y[examples_indices, :]
+        train_y_local = self.train_y[examples_indices]
     if y_type == 'scores':
         train_y_local = self.emb_predict(
                 self.train_heads[examples_indices],

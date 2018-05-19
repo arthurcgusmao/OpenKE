@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
-from sklearn.linear_model import SGDClassifier, LinearRegression, Lasso
+from sklearn.linear_model import SGDClassifier, LinearRegression, ElasticNet
 from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
@@ -36,14 +36,14 @@ class Explanator(object):
             'max_iter': [100000],
             'tol': [1e-3],
             'class_weight': ["balanced"],
-            'n_jobs': [n_jobs],
+            'n_jobs': [n_jobs]
         }]
         self.param_grid_regression = [{
-            'alpha': [0.1, 0.3, 0.9, 1.0],
-            'fit_intercept': [True, False],
+            'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
+            'alpha': [0.1, 0.3, 0.9],
+            'fit_intercept': [True],
             'max_iter': [10000],
-            'normalize': [False, True],
-            # 'n_jobs': [n_jobs], # Lasso does not support this parameter
+            'normalize': [False],
         }]
         self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path,'entity2id.txt'))
         self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path, 'relation2id.txt'))
@@ -156,7 +156,7 @@ class Explanator(object):
             print("Not possible to train explainable model in relation `{}` because training set contains a single class.".format(target_relation))
             return False
 
-        # self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
+        self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
 
         return True
 
@@ -189,22 +189,22 @@ class Explanator(object):
         gt_test_filt  = gt_test.loc[ gt_test['relation']  == target_relation_id]
 
         # drop relation column in ground truth data
-        gt_train_filt.drop('relation', axis=1, inplace=True)
-        gt_test_filt .drop('relation', axis=1, inplace=True)
+        gt_train_filt = gt_train_filt.drop('relation', axis=1)
+        gt_test_filt = gt_test_filt .drop('relation', axis=1)
 
         # map ids to entities in ground truth data
-        gt_train_filt['heads'] = gt_train_filt['heads'].map(self.id2entity)
-        gt_train_filt['tails'] = gt_train_filt['tails'].map(self.id2entity)
-        gt_test_filt ['heads'] = gt_test_filt ['heads'].map(self.id2entity)
-        gt_test_filt ['tails'] = gt_test_filt ['tails'].map(self.id2entity)
+        gt_train_filt['head'] = gt_train_filt['head'].map(self.id2entity)
+        gt_train_filt['tail'] = gt_train_filt['tail'].map(self.id2entity)
+        gt_test_filt ['head'] = gt_test_filt['head'].map(self.id2entity)
+        gt_test_filt ['tail'] = gt_test_filt['tail'].map(self.id2entity)
 
         # create dataframe from split data
-        train_df = pd.DataFrame({'heads': self.train_heads, 'tails': self.train_tails})
-        test_df  = pd.DataFrame({'heads': self.test_heads , 'tails': self.test_tails })
+        train_df = pd.DataFrame({'head': self.train_heads, 'tail': self.train_tails})
+        test_df  = pd.DataFrame({'head': self.test_heads , 'tail': self.test_tails })
 
         # merge to incorporate ground truth labels in dataframe split data
-        train_df_merged = train_df.merge(gt_train_filt, how='left', on=['heads', 'tails']).fillna(-1) # all unseen examples are negative
-        test_df_merged  = test_df .merge(gt_test_filt , how='left', on=['heads', 'tails']).fillna(-1) # all unseen examples are negative
+        train_df_merged = train_df.merge(gt_train_filt, how='left', on=['head', 'tail']).fillna(-1) # all unseen examples are negative
+        test_df_merged  = test_df .merge(gt_test_filt , how='left', on=['head', 'tail']).fillna(-1) # all unseen examples are negative
 
         # get labels from merged dfs
         self.train_true_y = np.array(train_df_merged['label'])
@@ -294,13 +294,13 @@ class Explanator(object):
         self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
 
         # train regression
-        gs = GridSearchCV(Lasso(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
+        gs = GridSearchCV(ElasticNet(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
         gs.fit(self.train_x, self.train_y_scores)
         self.model = gs.best_estimator_
         self.model_name = 'global_regression'
 
 
-    def train_local_logit(self, head, tail, get_local_data_func):
+    def train_local_logit(self, output_path, head, tail, get_local_data_func):
         """Train a logistic regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='labels')
@@ -309,41 +309,38 @@ class Explanator(object):
         gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
         gs.fit(local_data['x'], local_data['y'])
         self.model = gs.best_estimator_
-        self.model_name = 'global_logit'
+        self.model_name = 'local_logit'
 
         # Get the features of the test example
-        test_index = self.test_data.index[(self.test_data['head'] == head) & (self.test_data['tail'] == tail)]
-        print "INDEX ", test_index
-        test_x = self.test_x[test_index, :]
-        test_y = self.test_y.iloc[test_index]
-        prediction = self.model_definition.predict_proba(test_x)[:, 1]
+        test_index = local_data['index']
+        test_x = self.test_x[test_index]
+        test_y = self.test_y[test_index]
+        prediction = self.model.predict(test_x)
+        self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
 
-    def train_local_regression(self, head, tail, get_local_data_func):
+    def train_local_regression(self, output_path, head, tail, get_local_data_func):
         """Train a linear regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='scores')
 
         # train regression
-        gs = GridSearchCV(Lasso(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
-        gs.fit(local_data['x'], local_data['y'])
-        self.model = gs.best_estimator_
-        self.model_name = 'global_regression'
+        self.model = LinearRegression()
+        self.model.fit(local_data['x'], local_data['y'])
+        self.model_name = 'local_regression'
 
         # Get the features of the test example
         test_index = local_data['index']
-        print test_index, type(test_index)
         test_x = self.test_x[test_index]
         test_y = self.test_y[test_index]
         prediction = self.model.predict(test_x)
-        print(prediction)
-        self.explain_single_example(test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
+        self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
 
 
     def explain_per_example(self, output_path, data_type, n_examples=10):
-        coefficients = self.model.coef_.reshape(-1,1)
+        coefficients = self.model.coef_.reshape(-1, 1)
         if data_type == 'train':
             x = self.train_x
             y_hat = self.train_y
@@ -380,8 +377,9 @@ class Explanator(object):
         return final_reasons
 
 
-    def explain_single_example(self, features, coefficients, head, tail, y, y_hat, y_logit):
-        explanations = np.multiply(features, coefficients.T)
+    def explain_single_example(self, output_path, features, coefficients, head, tail, y, y_hat, y_logit):
+        features = features.todense()
+        explanations = np.multiply(features, coefficients).reshape(1, -1)
         example_df = pd.DataFrame(explanations, columns=self.feature_names)
         final_reasons = example_df.apply(get_reasons, axis=1)
         final_reasons['head'] = head
@@ -389,7 +387,7 @@ class Explanator(object):
         final_reasons['y_logit'] = y_logit
         final_reasons['y_hat'] = y_hat
         final_reasons['y'] = y
-        final_reasons.to_csv(os.path.join(output_path, self.target_relation, head + '_' + tail + '.tsv'), sep='\t')
+        final_reasons.to_csv(os.path.join(output_path, self.target_relation, head[0] + '_' + tail[0] + '.tsv'), sep='\t')
 
 
     def explain_model(self, top_n=10, output_path=None):
