@@ -145,7 +145,7 @@ class Explanator(object):
             self.train_heads = np.concatenate((self.train_heads, valid_heads))
             self.train_tails = np.concatenate((self.train_tails, valid_tails))
             self.train_y     = np.concatenate((self.train_y,     valid_y    ))
-            self.train_x      = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
+            self.train_x     = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
 
         # read test data (always present)
         self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
@@ -167,42 +167,48 @@ class Explanator(object):
         `self.train_x`, etc.).
 
         We get the original data from a list of positive triples in order to dispense with the need
-        for having the corrupted data path (that may change from model to model).
+        for having the corrupted data path (which may change from model to model).
         """
         # these files have no labels, they are all positive instances
-        gt_train2id = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
-        gt_valid2id = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
-        gt_test2id  = pd.read_csv(os.path.join(dataset_path, 'test2id.txt' ), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
+        gt_train = pd.read_csv(os.path.join(dataset_path, 'train2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
+        gt_valid = pd.read_csv(os.path.join(dataset_path, 'valid2id.txt'), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
+        gt_test  = pd.read_csv(os.path.join(dataset_path, 'test2id.txt' ), skiprows=1, sep=' ', names=['head', 'tail', 'relation'])
 
         # merge train and validation data
-        gt_train2id = pd.concat((gt_train2id, gt_valid2id))
+        gt_train = pd.concat((gt_train, gt_valid))
+
+        # add labels (all positive)
+        gt_train['label'] = 1
+        gt_test ['label'] = 1
 
         # get id of target relation
         target_relation_id = self.relation2id[target_relation]
 
         # filter data to get only triples whose relation is the target relation
-        gt_train2id_filt = gt_train2id.loc[gt_train2id['relation'] == target_relation_id]
-        gt_test2id_filt  =  gt_test2id.loc[ gt_test2id['relation'] == target_relation_id]
+        gt_train_filt = gt_train.loc[gt_train['relation'] == target_relation_id]
+        gt_test_filt  = gt_test.loc[ gt_test['relation']  == target_relation_id]
 
-        # compare split data with ground truth data and create labels
-        heads2id = [self.entity2id[h] for h in self.train_heads]
-        tails2id = [self.entity2id[t] for t in self.train_tails]
+        # drop relation column in ground truth data
+        gt_train_filt.drop('relation', axis=1, inplace=True)
+        gt_test_filt .drop('relation', axis=1, inplace=True)
 
-        self.train_true_y = []
-        for head,tail in zip(heads2id, tails2id):
-            matches = len(gt_train2id_filt.loc[
-                (gt_train2id_filt['head'] == head) &
-                (gt_train2id_filt['tail'] == tail)
-            ])
-            self.train_true_y.append(1 if matches > 0 else -1)
+        # map ids to entities in ground truth data
+        gt_train_filt['heads'] = gt_train_filt['heads'].map(self.id2entity)
+        gt_train_filt['tails'] = gt_train_filt['tails'].map(self.id2entity)
+        gt_test_filt ['heads'] = gt_test_filt ['heads'].map(self.id2entity)
+        gt_test_filt ['tails'] = gt_test_filt ['tails'].map(self.id2entity)
 
-        self.test_true_y = []
-        for head,tail in zip(heads2id, tails2id):
-            matches = len(gt_test2id_filt.loc[
-                (gt_test2id_filt['head'] == head) &
-                (gt_test2id_filt['tail'] == tail)
-            ])
-            self.test_true_y.append(1 if matches > 0 else -1)
+        # create dataframe from split data
+        train_df = pd.DataFrame({'heads': self.train_heads, 'tails': self.train_tails})
+        test_df  = pd.DataFrame({'heads': self.test_heads , 'tails': self.test_tails })
+
+        # merge to incorporate ground truth labels in dataframe split data
+        train_df_merged = train_df.merge(gt_train_filt, how='left', on=['heads', 'tails']).fillna(-1) # all unseen examples are negative
+        test_df_merged  = test_df .merge(gt_test_filt , how='left', on=['heads', 'tails']).fillna(-1) # all unseen examples are negative
+
+        # get labels from merged dfs
+        self.train_true_y = np.array(train_df_merged['label'])
+        self.test_true_y  = np.array(test_df_merged ['label'])
 
 
     def get_results(self):
