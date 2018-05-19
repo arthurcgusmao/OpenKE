@@ -5,7 +5,7 @@ The idea is that we experiment with many different ways of getting examples in t
 easier to understand.
 """
 
-def get_local_train_data(self, head, tail, y_mode="labels"):
+def get_local_train_data(self, head, tail, y_type="labels"):
     """Returns a dict containing the features and the labels/scores for the nearby examples, for
     training a local approximation.
 
@@ -13,7 +13,7 @@ def get_local_train_data(self, head, tail, y_mode="labels"):
     - `self`: (Explanator) an instance of the Explanator class
     - `head`: (string) the head entity name
     - `tail`: (string) the tail entity name
-    - `y_mode`: (string) "labels" or "scores", the kind of y data that should be returned
+    - `y_type`: (string) "labels" or "scores", the kind of y data that should be returned
     """
     # get the nearest neighbors
     _, head_indices = self.get_kneighbors(head)
@@ -21,19 +21,19 @@ def get_local_train_data(self, head, tail, y_mode="labels"):
 
     # get the corresponding training examples
     examples_indices = []
-    for head_index in head_indices[0][1:]:
-        examples_indices.extend(self.train_data.index[self.train_data['head'] == self.id2entity[head_index]].tolist())
-    for tail_index in tail_indices[0][1:]:
-        examples_indices.extend(self.train_data.index[self.train_data['tail'] == self.id2entity[tail_index]].tolist())
+    for head_id in head_indices[0][1:]:
+        examples_indices.extend(np.where(self.train_heads == self.id2entity[head_id]))
+    for tail_id in tail_indices[0][1:]:
+        examples_indices.extend(np.where(self.train_tails == self.id2entity[tail_id]))
     self.n_nearby_examples = len(examples_indices)
 
     # get features
     train_x_local = self.train_x[examples_indices, :]
 
     # get labels or scores
-    if y_mode == 'labels':
+    if y_type == 'labels':
         train_y_local = self.train_y[examples_indices, :]
-    if y_mode == 'scores':
+    if y_type == 'scores':
         train_y_local = self.emb_predict(
                 self.train_heads[examples_indices],
                 self.train_tails[examples_indices],
