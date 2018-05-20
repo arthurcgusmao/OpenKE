@@ -14,7 +14,7 @@ def ensure_dir(path):
 def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'valid.txt'],
                        order=['head', 'relation', 'tail'], sep='\t', skiprows=0,
                        labels=['valid.txt', 'test.txt'], extension='.txt',
-                       graph_input_dirname='/pra_graph_input/'):
+                       graph_input_dirname='/pra_graph_input/', use_ids=False):
     """Creates a `xxx.tsv` files that contain a positive observation for each row in the order
     (head, relation, tail), tab-separated. Takes as input `xxx.txt` files, tab-separated, where
     each row represents an observation with columns in the same order, that can have a 4th column
@@ -23,8 +23,8 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
     Arguments:
     - dataset_dirpath: path to the dataset directory where all files should be in.
     - names_fpath: should be a list of file names (e.g., train.txt, test.txt, valid.txt).
-    - labels: indicates which files have labels in the last row, so the function know what is the
-    correct thing to do.
+    - labels: indicates which files have labels in the last column, so the function know what is
+              the correct thing to do.
     """
     # ensure the `pra` directory exists
     pra_input_dir = dataset_dirpath + '/' + graph_input_dirname + '/'
@@ -55,8 +55,10 @@ def create_graph_input(dataset_dirpath, names_fname=['train.txt', 'test.txt', 'v
 
         # write file for current df in `pra` dir
         new_fname = fname.replace(extension, '.tsv')
+        if use_ids: new_fname = new_fname.replace('2id', '') # remove 2id at the end of file
         pos_df.to_csv(pra_input_dir + new_fname, columns=['head', 'relation', 'tail'],
                       index=False, header=False, sep='\t')
+    print("Graph input created in `{}`.".format(pra_input_dir))
 
 
 ## ideally, these files will be placed under the directory of a specific (trained) model,
