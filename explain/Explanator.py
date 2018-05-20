@@ -12,6 +12,7 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction import DictVectorizer
+from tqdm import tqdm
 
 import config, models
 from tools import dataset_tools, train_test
@@ -294,13 +295,17 @@ class Explanator(object):
         self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
 
         # train regression
-        gs = GridSearchCV(ElasticNet(copy_X=True), self.param_grid_regression, n_jobs=self.n_jobs)
-        gs.fit(self.train_x, self.train_y_scores)
-        self.model = gs.best_estimator_
+        self.model = LinearRegression()
+        self.model.fit(self.train_x, self.train_y_scores)
         self.model_name = 'global_regression'
 
+    def train_local_logit_for_all(self, output_path, get_local_data_func):
+        results = pd.DataFrame(columns=['head', 'tail','y', 'y_hat', 'prediction'])
+        for head, tail in tqdm(zip(self.test_heads, self.test_tails)):
+            results = results.append(self.train_local_logit(output_path, head, tail, get_local_data_func), ignore_index=True)
+        results.to_csv(os.path.join(output_path, self.target_relation, 'local_stats_logit' + '.tsv'), sep='\t')
 
-    def train_local_logit(self, output_path, head, tail, get_local_data_func):
+    def train_local_logit(self, output_path, head, tail, get_local_data_func, output_explanation=False):
         """Train a logistic regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='labels')
@@ -316,11 +321,22 @@ class Explanator(object):
         test_x = self.test_x[test_index]
         test_y = self.test_y[test_index]
         prediction = self.model.predict(test_x)
-        self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
+        if output_explanation:
+            self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
+        return {'head': head,
+                'tail': tail,
+                'y': self.test_true_y[test_index][0],
+                'y_hat': test_y[0],
+                'prediction': prediction[0]}
 
+    def train_local_regression_for_all(self, output_path, get_local_data_func):
+        results = pd.DataFrame()
+        for head, tail in tqdm(zip(self.test_heads, self.test_tails)):
+            results.append(self.train_local_regression(output_path, head, tail, get_local_data_func), ignore_index=True)
+        results.to_csv(os.path.join(output_path, self.target_relation, 'local_stats_regression' + '.tsv'), sep='\t')
 
-    def train_local_regression(self, output_path, head, tail, get_local_data_func):
+    def train_local_regression(self, output_path, head, tail, get_local_data_func, output_explanation=False):
         """Train a linear regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='scores')
@@ -335,8 +351,14 @@ class Explanator(object):
         test_x = self.test_x[test_index]
         test_y = self.test_y[test_index]
         prediction = self.model.predict(test_x)
-        self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         print "The triple has been predicted as ", prediction, " when should have been ", test_y
+        if output_explanation:
+            self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
+        return {'head': head,
+                'tail': tail,
+                'y': self.test_true_y[test_index],
+                'y_hat': test_y,
+                'prediction': prediction}
 
 
     def explain_per_example(self, output_path, data_type, n_examples=10):
@@ -377,14 +399,14 @@ class Explanator(object):
         return final_reasons
 
 
-    def explain_single_example(self, output_path, features, coefficients, head, tail, y, y_hat, y_logit):
+    def explain_single_example(self, output_path, features, coefficients, head, tail, y, y_hat, prediction):
         features = features.todense()
         explanations = np.multiply(features, coefficients).reshape(1, -1)
         example_df = pd.DataFrame(explanations, columns=self.feature_names)
         final_reasons = example_df.apply(get_reasons, axis=1)
         final_reasons['head'] = head
         final_reasons['tail'] = tail
-        final_reasons['y_logit'] = y_logit
+        final_reasons['y_logit'] = prediction
         final_reasons['y_hat'] = y_hat
         final_reasons['y'] = y
         final_reasons.to_csv(os.path.join(output_path, self.target_relation, head[0] + '_' + tail[0] + '.tsv'), sep='\t')
