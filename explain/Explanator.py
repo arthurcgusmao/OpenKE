@@ -18,7 +18,7 @@ import config, models
 from tools import dataset_tools, train_test
 # from tools.feature_matrices import parse_feature_matrix
 
-from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_dir, get_reasons
+from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_dir, ensure_parentdir, get_reasons
 
 ### --------------------------------------------------------------------------
 ### --------------------------------------------------------------------------
@@ -48,16 +48,16 @@ class Explanator(object):
         }]
         self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path,'entity2id.txt'))
         self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path, 'relation2id.txt'))
+        # get the embedding model
+        if not hasattr(self, 'emb_model'):
+            self.emb_model = train_test.restore_model(self.emb_model_path)
+            self.emb_model.calculate_thresholds()
 
 
     def emb_predict(self, heads, tails, rels, batch_size=10000):
         """Get the score for each head, tail and relation. Inputs `heads`, `tails`, and `rels`
         should be names, and not IDs.
         """
-        # get the embedding model
-        if not hasattr(self, 'emb_model'):
-            self.emb_model = train_test.restore_model(self.emb_model_path)
-
         # get head, tail and rel IDs
         heads2id = [self.entity2id[h]   for h in heads]
         tails2id = [self.entity2id[t]   for t in tails]
@@ -74,6 +74,16 @@ class Explanator(object):
         return scores
 
 
+    def predict(self, x):
+        """Returns a prediction from the explainable model.
+        """
+        if self.model_name == 'global_logit' or self.model_name == 'local_logit':
+            return self.model.predict(x)
+        else:
+            res = self.model.predict(x) > self.target_relation_thres
+            return [1 if s else -1 for s in res]
+
+
     def get_kneighbors(self, ent):
         """Returns a (distance, indices) tuple for the k nearest neighbors of an entity, in the
         embedding vector space.
@@ -83,10 +93,6 @@ class Explanator(object):
         """
         # create knn instance if necessary
         if not hasattr(self, 'nbrs'):
-            # create the embedding model if necessary
-            if not hasattr(self, 'emb_model'):
-                self.emb_model = train_test.restore_model(self.emb_model_path)
-
             self.embed_params = self.emb_model.get_parameters()
             self.nbrs = NearestNeighbors(n_neighbors=self.max_knn_k, n_jobs=self.n_jobs).fit(self.embed_params['ent_embeddings'])
 
@@ -221,8 +227,8 @@ class Explanator(object):
 
         # relation and data information
         stats['Relation'] = self.target_relation
-        stats['# Triples Train'] = len(train_heads)
-        stats['# Triples Test '] = len(test_heads )
+        stats['# Triples Train'] = len(self.train_heads)
+        stats['# Triples Test '] = len(self.test_heads )
         # stats['# Triples Valid'] = ??? # we are now using the CV's validation sets
 
         # model parameters
@@ -244,22 +250,22 @@ class Explanator(object):
         stats['True Train Accuracy']        = self.model.score(self.train_x, self.train_true_y)
 
         # precision
-        stats['Test Precision']             = precision_score(self.test_y,       self.model.predict(self.test_x))
-        stats['True Test Precision']        = precision_score(self.test_true_y,  self.model.predict(self.test_x))
-        stats['Train Precision']            = precision_score(self.train_y,      self.model.predict(self.train_x))
-        stats['True Train Precision']       = precision_score(self.train_true_y, self.model.predict(self.train_x))
+        stats['Test Precision']             = precision_score(self.test_y,       self.predict(self.test_x))
+        stats['True Test Precision']        = precision_score(self.test_true_y,  self.predict(self.test_x))
+        stats['Train Precision']            = precision_score(self.train_y,      self.predict(self.train_x))
+        stats['True Train Precision']       = precision_score(self.train_true_y, self.predict(self.train_x))
 
         # recall
-        stats['Test Recall']                = recall_score(self.test_y,       self.model.predict(self.test_x))
-        stats['True Test Recall']           = recall_score(self.test_true_y,  self.model.predict(self.test_x))
-        stats['Train Recall']               = recall_score(self.train_y,      self.model.predict(self.train_x))
-        stats['True Train Recall']          = recall_score(self.train_true_y, self.model.predict(self.train_x))
+        stats['Test Recall']                = recall_score(self.test_y,       self.predict(self.test_x))
+        stats['True Test Recall']           = recall_score(self.test_true_y,  self.predict(self.test_x))
+        stats['Train Recall']               = recall_score(self.train_y,      self.predict(self.train_x))
+        stats['True Train Recall']          = recall_score(self.train_true_y, self.predict(self.train_x))
 
         # F1 score
-        stats['Test F1_score']              = f1_score(self.test_y,       self.model.predict(self.test_x))
-        stats['True Test F1_score']         = f1_score(self.test_true_y,  self.model.predict(self.test_x))
-        stats['Train F1_score']             = f1_score(self.train_y,      self.model.predict(self.train_x))
-        stats['True Train F1_score']        = f1_score(self.train_true_y, self.model.predict(self.train_x))
+        stats['Test F1_score']              = f1_score(self.test_y,       self.predict(self.test_x))
+        stats['True Test F1_score']         = f1_score(self.test_true_y,  self.predict(self.test_x))
+        stats['Train F1_score']             = f1_score(self.train_y,      self.predict(self.train_x))
+        stats['True Train F1_score']        = f1_score(self.train_true_y, self.predict(self.train_x))
 
         stats['Test Positive Ratio']        = self.test_y[      self.test_y==1      ].shape[0]/self.test_y.shape[0]
         stats['True Test Positive Ratio']   = self.test_true_y[ self.test_true_y==1 ].shape[0]/self.test_true_y.shape[0]
@@ -270,7 +276,7 @@ class Explanator(object):
         stats['Test Embedding Accuracy']    = self.test_y[ self.test_y == self.test_true_y  ].shape[0]/self.test_y.shape[0]
 
         # relevant features
-        stats['# Relevant Features'] = self.explanation[self.explanation['weights'] != 0].shape[0]
+        stats['# Relevant Features'] = self.explanation[self.explanation['weight'] != 0].shape[0]
         # NOTE: in the future this should be changed, just because a feature has weight different
         #       than zero it doesn't necessarily mean that it is relevant. We must find a way to
         #       define this "relevance" formally.
@@ -293,6 +299,7 @@ class Explanator(object):
         # get embedding scores (not labels)
         train_rels = [self.target_relation] * len(self.train_heads) # list of relations to be passed to `self.emb_predict()`
         self.train_y_scores = self.emb_predict(self.train_heads, self.train_tails, train_rels)
+        self.target_relation_thres = self.emb_model.get_threshold_for_relation(self.relation2id[self.target_relation])
 
         # train regression
         self.model = LinearRegression()
@@ -303,7 +310,9 @@ class Explanator(object):
         results = pd.DataFrame(columns=['head', 'tail','y', 'y_hat', 'prediction'])
         for head, tail in tqdm(zip(self.test_heads, self.test_tails)):
             results = results.append(self.train_local_logit(output_path, head, tail, get_local_data_func), ignore_index=True)
-        results.to_csv(os.path.join(output_path, self.target_relation, 'local_stats_logit' + '.tsv'), sep='\t')
+        output_filepath = os.path.join(output_path, self.target_relation, 'local_stats_logit' + '.tsv')
+        ensure_parentdir(output_filepath)
+        results.to_csv(output_filepath, sep='\t')
 
     def train_local_logit(self, output_path, head, tail, get_local_data_func, output_explanation=False):
         """Train a logistic regression model locally for the current relation and head and tail entities.
@@ -334,12 +343,15 @@ class Explanator(object):
         results = pd.DataFrame()
         for head, tail in tqdm(zip(self.test_heads, self.test_tails)):
             results.append(self.train_local_regression(output_path, head, tail, get_local_data_func), ignore_index=True)
-        results.to_csv(os.path.join(output_path, self.target_relation, 'local_stats_regression' + '.tsv'), sep='\t')
+        output_filepath = os.path.join(output_path, self.target_relation, 'local_stats_regression' + '.tsv')
+        ensure_parentdir(output_filepath)
+        results.to_csv(output_filepath, sep='\t')
 
     def train_local_regression(self, output_path, head, tail, get_local_data_func, output_explanation=False):
         """Train a linear regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='scores')
+        self.target_relation_thres = self.emb_model.get_threshold_for_relation(self.relation2id[self.target_relation])
 
         # train regression
         self.model = LinearRegression()
@@ -361,7 +373,7 @@ class Explanator(object):
                 'prediction': prediction}
 
 
-    def explain_per_example(self, output_path, data_type, n_examples=10):
+    def explain_per_example(self, output_path, data_type='test', n_examples=100):
         coefficients = self.model.coef_.reshape(-1, 1)
         if data_type == 'train':
             x = self.train_x
@@ -391,7 +403,10 @@ class Explanator(object):
         final_reasons = examples_df.apply(get_reasons, axis=1)
         final_reasons['head'] = heads[index]
         final_reasons['tail'] = tails[index]
-        answers = self.model.predict_proba(features)[:, 1]
+        if hasattr(self.model, 'predict_proba'):
+            answers = self.model.predict_proba(features)[:, 1]
+        else:
+            answers = self.model.predict(features)
         final_reasons['y_logit'] = answers
         final_reasons['y_hat'] = y_hat
         final_reasons['y'] = y
