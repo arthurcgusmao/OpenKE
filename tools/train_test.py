@@ -41,15 +41,22 @@ def setup_config(model_info):
     return con
 
 
-def restore_model(import_path):
-    """Restores the whole model from a results folder using information that was saved in
-    `model_info.tsv` and `tf_model`, following the setup in `pipeline()`.
+def read_model_info(import_path):
+    """Reads `model_info.tsv` from a model directory path and returns its information in a dict.
     """
     model_info_df = pd.read_csv('{}/model_info.tsv'.format(import_path), sep='\t')
     # transform model info into dict with only one "row"
     model_info = model_info_df.to_dict()
     for key,d in model_info.iteritems():
         model_info[key] = d[0]
+    return model_info
+
+
+def restore_model(import_path):
+    """Restores the whole model from a results folder using information that was saved in
+    `model_info.tsv` and `tf_model`, following the setup in `pipeline()`.
+    """
+    model_info = read_model_info(import_path)
 
     # setup config instance
     con = setup_config(model_info)

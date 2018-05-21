@@ -34,7 +34,7 @@ def read_name2id_file(fpath, sep='\t', skiprows=1, id_first=False):
         names = ['id', 'name']
     else:
         names = ['name', 'id']
-    df = pd.read_csv(fpath, sep=sep, skiprows=skiprows, names=names)
+    df = pd.read_csv(fpath, sep=sep, skiprows=skiprows, names=names, converters={'id': int, 'name': str})
     return create_name2id_dicts_from_df(df)
 
 

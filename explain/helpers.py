@@ -12,7 +12,7 @@ def parse_feature_matrix(filepath):
     feat_dicts = []
     with open(filepath, 'r') as f:
         for line in f:
-            ent_pair, label, features = line.rstrip().split('\t')
+            ent_pair, label, features = line.replace('\n', '').split('\t')
             head, tail = ent_pair.split(',')
             d = {}
             for feat in features.split(' -#- '):
@@ -23,7 +23,7 @@ def parse_feature_matrix(filepath):
             tails.append(tail)
             labels.append(int(label))
             feat_dicts.append(d)
-
+    
     return np.array(heads), np.array(tails), np.array(labels), feat_dicts
 
 
@@ -50,6 +50,14 @@ def ensure_dir(dirpath):
     """
     if not os.path.exists(dirpath):
         os.makedirs(dirpath)
+
+
+def ensure_parentdir(filepath):
+    """Creates the parent directories of a file if they do not exist.
+    """
+    dir_ = os.path.dirname(filepath)
+    if not os.path.exists(dir_):
+        os.makedirs(dir_)
 
 
 def get_reasons(row, n=10):
