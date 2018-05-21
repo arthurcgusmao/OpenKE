@@ -6,7 +6,7 @@ import train_test, dataset_tools, pra_setup
 
 
 def extract_features_for_explaining(import_path, neg_rate, bern, feature_extractors, cuda_device=0, use_ids=False,
-        g_hat_info=None):
+        g_hat_info=None, data_to_use='both'):
     """Extract features using PRA library.
 
     Arguments:
@@ -16,6 +16,8 @@ def extract_features_for_explaining(import_path, neg_rate, bern, feature_extract
     - `use_ids` (bool): indicates whether we should extract features using entities/relations ids
     instead of names
     - `g_hat_info` (dict): see below
+    - `data_to_use` (string): data that PRA should consider when extracting features. Should be one
+    of `both`, `training`, or `testing`.
 
     If extracting features from a graph predicted by the embedding model, a dict should be passed
     in `g_hat_info` with the following key-value pairs:
@@ -91,7 +93,7 @@ def extract_features_for_explaining(import_path, neg_rate, bern, feature_extract
             )
     else:
         pass # ideally we would call predict_G here, but we are doing it before calling this function
-    
+
 
     ## Generate/Read Negative Examples
     if not os.path.exists(corrupted_filepath):
@@ -195,12 +197,13 @@ def extract_features_for_explaining(import_path, neg_rate, bern, feature_extract
                         {}
                     ],
                     "feature size": -1
-                }}
+                }},
+                "data": "{}"
             }},
             "output": {{ "output matrices": true }}
         }}
 
-        """.format(g_type, pra_graph_input_dir, pra_graph_input_dir, split_name, feat_extractor_string)
+        """.format(g_type, pra_graph_input_dir, pra_graph_input_dir, split_name, feat_extractor_string, data_to_use)
     else:
         spec = """
         {{
@@ -226,13 +229,14 @@ def extract_features_for_explaining(import_path, neg_rate, bern, feature_extract
                         {}
                     ],
                     "feature size": -1
-                }}
+                }},
+                "data": "{}"
             }},
             "output": {{ "output matrices": true }}
         }}
 
-        """.format(g_hat_info['knn_k'], pra_graph_input_dir, split_name, feat_extractor_string)
-    
+        """.format(g_hat_info['knn_k'], pra_graph_input_dir, split_name, feat_extractor_string, data_to_use)
+
     spec_fpath = '{}/experiment_specs/{}.json'.format(pra_explain_path, spec_name)
     with open(spec_fpath, 'w') as f:
         f.write(spec)
@@ -248,7 +252,7 @@ def extract_features_for_explaining(import_path, neg_rate, bern, feature_extract
     print("\nIf PRA run successfully, features were extracted and saved into `{}`.".format(pra_explain_path))
 
 
-def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extractors, use_ids=False):
+def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extractors, use_ids=False, data_to_use='both'):
     """Extracts features from a dataset. This is useful when one wants to run PRA directly on an input
     graph.
     """
@@ -277,7 +281,7 @@ def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extracto
 
     ensure_dir(pra_path)
     ensure_dir(pra_path + '/experiment_specs')
-    
+
     spec = """
     {{
         "graph": {{
@@ -306,11 +310,12 @@ def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extracto
                     {}
                 ],
                 "feature size": -1
-            }}
+            }},
+            "data": "{}"
         }},
-        "output": {{ "output matrices": true }}
+        "output": {{ "output matrices": true }},
     }}
-    """.format(g_type, pra_graph_input_dir, pra_graph_input_dir, split_name, feat_extractor_string)
+    """.format(g_type, pra_graph_input_dir, pra_graph_input_dir, split_name, feat_extractor_string, data_to_use)
     spec_fpath = '{}/experiment_specs/{}.json'.format(pra_path, spec_name)
     with open(spec_fpath, 'w') as f:
         f.write(spec)
@@ -349,8 +354,8 @@ def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extracto
 
     valid2id = pd.concat((valid2id_pos, valid2id_neg))
     test2id = pd.concat((test2id_pos, test2id_neg))
-    
-    
+
+
     # get data
     entity2id, id2entity = dataset_tools.read_name2id_file(dataset_path + '/entity2id.txt')
     relation2id, id2relation = dataset_tools.read_name2id_file(dataset_path + '/relation2id.txt')
@@ -375,7 +380,7 @@ def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extracto
             {'train': train2id, 'valid': valid2id, 'test': test2id},
             splits_dirpath=pra_path+'/splits',
             split_name=split_name)
-    
+
     ## Extract Features
     bash_command = '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/tools/run_pra_n_times.sh {} {} {}'\
         .format(pra_path, spec_name, n_relations)
@@ -383,7 +388,7 @@ def extract_features_from_dataset(dataset_path, neg_rate, bern, feature_extracto
     output, error = process.communicate()
     print output, error
     print("\nIf PRA run successfully, features were extracted and saved into `{}`.".format(pra_path))
-    
+
 
 def ensure_dir(dirpath):
     """Creates the directory if it does not exist.
