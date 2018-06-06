@@ -21,7 +21,7 @@ def knn_products_generator(k, knn_indices, pos_train_and_valid):
                 'rel': triple[2]
             }
 
-## General functions for predicting Ĝ
+## General functions for predicting G_hat
 
 def get_batch_from_generator(triples_iter, batch_size):
     batch_heads = []
@@ -54,7 +54,7 @@ def filter_positives(heads, tails, rels, preds):
     return positive_triples
 
 
-def predict_g_hat(triples_iterator, batch_size=10000):
+def predict_g_hat(triples_iterator, con, batch_size=10000):
     positive_triples = []
     triples_count = 0
     while True:
@@ -66,32 +66,6 @@ def predict_g_hat(triples_iterator, batch_size=10000):
             break
     return positive_triples, triples_count
 
-
-## Define Pipeline
-
-def pipeline(k, gen, batch_size=100000):
-    prediction_info = {}
-    prediction_info['knn_time'] = knn_learning_time
-
-    start_time = time.time()
-    pos_triples, pred_size = predict_g_hat(
-        triples_iterator=gen,
-        batch_size=batch_size
-    )
-    prediction_info['pred_time'] = time.time() - start_time
-    prediction_info['positive_size'] = len(pos_triples)
-    prediction_info['total_time'] = prediction_info['knn_time'] + prediction_info['pred_time']
-    prediction_info['predicted_size'] = pred_size
-    prediction_info['k'] = k
-
-    # ensure g_hat dir
-    if not os.path.exists(g_hat_path):
-        os.makedirs(g_hat_path)
-
-    # save positive triples
-    pd.DataFrame(pos_triples).to_csv('{}/positives2id_{}nn.tsv'.format(g_hat_path, k),
-                                     sep='\t', index=False, header=False, columns=['head', 'relation', 'tail'])
-    return prediction_info
 
 
 
@@ -135,7 +109,34 @@ def run(import_path, ks):
     knn_learning_time = time.time() - start_time
     print("OK. KNN learning time: {}".format(knn_learning_time))
 
-    # Predict Ĝ (for all ks)
+    # Define Pipeline
+    def pipeline(k, gen, batch_size=100000):
+        prediction_info = {}
+        prediction_info['knn_time'] = knn_learning_time
+
+        start_time = time.time()
+        pos_triples, pred_size = predict_g_hat(
+            triples_iterator=gen,
+            con=con,
+            batch_size=batch_size
+        )
+        prediction_info['pred_time'] = time.time() - start_time
+        prediction_info['positive_size'] = len(pos_triples)
+        prediction_info['total_time'] = prediction_info['knn_time'] + prediction_info['pred_time']
+        prediction_info['predicted_size'] = pred_size
+        prediction_info['k'] = k
+
+        # ensure g_hat dir
+        if not os.path.exists(g_hat_path):
+            os.makedirs(g_hat_path)
+
+        # save positive triples
+        pd.DataFrame(pos_triples).to_csv('{}/positives2id_{}nn.tsv'.format(g_hat_path, k),
+                                         sep='\t', index=False, header=False, columns=['head', 'relation', 'tail'])
+        return prediction_info
+
+
+    # Predict G_hat (for all ks)
     prediction_info_list = []
     for k in ks:
         print("Predicting G_hat for k={}...".format(k))
