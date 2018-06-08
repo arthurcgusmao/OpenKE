@@ -100,7 +100,7 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
         g_hat_path_ids = os.path.abspath(emb_import_path + '/g_hat/' + g_hat_fname_ids)
         g_hat_path_names = os.path.abspath(emb_import_path + '/g_hat/' + g_hat_fname_names)
         pra_graph_input_dir = g_hat_path_names
-        g_type = 'ghat'
+        g_type = 'ghat_{}nn'.format(g_hat_info['knn_k'])
         if use_ids:
             g_type = 'ghat2id'
             pra_graph_input_dir = g_hat_path_ids
