@@ -100,10 +100,11 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
         g_hat_path_ids = os.path.abspath(emb_import_path + '/g_hat/' + g_hat_fname_ids)
         g_hat_path_names = os.path.abspath(emb_import_path + '/g_hat/' + g_hat_fname_names)
         pra_graph_input_dir = g_hat_path_names
-        g_type = 'ghat_{}nn'.format(g_hat_info['knn_k'])
+        g_type = 'ghat'
         if use_ids:
             g_type = 'ghat2id'
             pra_graph_input_dir = g_hat_path_ids
+        g_type += '_{}nn'.format(g_hat_info['knn_k'])
     split_name = '{}_{}negrate_{}'.format(g_type, neg_rate, distribution)
 
     # handle feature extraction strings and spec name
@@ -253,7 +254,7 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
         spec = """
         {{
             "graph": {{
-                "name": "g_hat_{}nn",
+                "name": "{}",
                 "relation sets": [
                     {{
                         "is kb": false,
@@ -280,7 +281,7 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
             "output": {{ "output matrices": true }}
         }}
 
-        """.format(g_hat_info['knn_k'], pra_graph_input_dir, split_name, feat_extractor_string, data_to_use)
+        """.format(g_type, pra_graph_input_dir, split_name, feat_extractor_string, data_to_use)
 
     spec_fpath = '{}/experiment_specs/{}.json'.format(pra_dir_path, spec_name)
     with open(spec_fpath, 'w') as f:
