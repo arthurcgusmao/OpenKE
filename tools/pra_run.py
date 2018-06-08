@@ -12,7 +12,7 @@ def ensure_dir(d):
     if not os.path.exists(d):
         os.makedirs(d)
 
-def decode_from_id_to_names(folds):
+def decode_from_id_to_names(folds, id2entity, id2relation):
     for fold in folds:
         fold['head'] = fold['head'].map(id2entity)
         fold['tail'] = fold['tail'].map(id2entity)
@@ -162,11 +162,11 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
 
     # decode from id to names if necessary
     if not use_ids:
-        decode_from_id_to_names([train2id, valid2id, test2id])
+        decode_from_id_to_names([train2id, valid2id, test2id], id2entity, id2relation)
         if g_hat_flag:
             # convert ids g_hat file to names file
             g_hat_df = pd.read_csv(g_hat_path_ids, names=['head', 'relation', 'tail'], sep='\t', skiprows=0)
-            decode_from_id_to_names([g_hat_df])
+            decode_from_id_to_names([g_hat_df], id2entity, id2relation)
             g_hat_df.to_csv(g_hat_path_names, header=False, index=False, sep='\t', columns=['head', 'relation', 'tail'])
         # WARNING: at this stage we have transformed the dataframes,
         #   and entities and relations are not represented by ids anymore
@@ -290,7 +290,8 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
 
     ## Extract Features
     bash_command = '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/tools/run_pra.sh {} {}'.format(pra_dir_path, spec_name)
-    n_runs = n_relations; if data_to_use == 'onefold': n_runs *= 3
+    n_runs = n_relations
+    if data_to_use == 'onefold': n_runs *= 3
     for r in range(n_runs):
         print("Running #{}: {}".format(r, bash_command))
         process = subprocess.Popen(bash_command.split(), stdout=subprocess.PIPE)
