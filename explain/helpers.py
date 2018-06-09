@@ -1,3 +1,4 @@
+from __future__ import division
 import os
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ def parse_feature_matrix(filepath):
             tails.append(tail)
             labels.append(int(label))
             feat_dicts.append(d)
-    
+
     return np.array(heads), np.array(tails), np.array(labels), feat_dicts
 
 
@@ -32,6 +33,7 @@ def getattr_else_None(class_, attr_name):
         attr = getattr(class_, attr_name)
     except AttributeError:
         attr = None
+    return attr
 
 
 def get_dirs(dirpath):
@@ -40,7 +42,7 @@ def get_dirs(dirpath):
     dirs = []
     for f in os.listdir(dirpath):
         f_path = os.path.join(dirpath, f)
-        if os.path.isdir(f_path):
+        if os.path.isdir(f_path) and f[0] != '.':
             dirs.append(f)
     return dirs
 
@@ -78,3 +80,44 @@ def get_reasons(row, n=10):
         output['reason' + str(i)] = "n/a"
         output['relevance' + str(i)] = "n/a"
     return output
+
+
+def get_metrics(dataframe_path, dataset_name):
+    relevant_test_metrics = ['Test Accuracy',
+                             'Test Embedding Accuracy',
+                             'Test F1_score',
+                             'Test Positive Ratio',
+                             'Test Precision',
+                             'Test Recall',
+                             'True Test Accuracy',
+                             'True Test F1_score',
+                             'True Test Positive Ratio',
+                             'True Test Precision',
+                             'True Test Recall']
+
+    relevant_train_metrics = ['Train Accuracy',
+                              'Train Embedding Accuracy',
+                              'Train F1_score',
+                              'Train Positive Ratio',
+                              'Train Precision',
+                              'Train Recall',
+                              'True Train Accuracy',
+                              'True Train F1_score',
+                              'True Train Positive Ratio',
+                              'True Train Precision',
+                              'True Train Recall']
+
+    per_relation_metrics = pd.read_csv(dataframe_path, sep='\t')
+    per_relation_metrics['train_weights'] = per_relation_metrics['# Triples Train']/per_relation_metrics['# Triples Train'].sum()
+    per_relation_metrics['test_weights'] = per_relation_metrics['# Triples Test ']/per_relation_metrics['# Triples Test '].sum()
+
+    metrics_dict = {}
+    metrics_dict['dataset'] = dataset_name
+    for metric in relevant_test_metrics:
+        metrics_dict[metric + '_micro'] = np.average(per_relation_metrics[metric], weights=per_relation_metrics['test_weights'])
+        metrics_dict[metric + '_macro'] = np.average(per_relation_metrics[metric])
+    for metric in relevant_train_metrics:
+        metrics_dict[metric + '_micro'] = np.average(per_relation_metrics[metric], weights=per_relation_metrics['train_weights'])
+        metrics_dict[metric + '_macro'] = np.average(per_relation_metrics[metric])
+
+    return metrics_dict

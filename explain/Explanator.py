@@ -5,6 +5,7 @@ import itertools
 import multiprocessing
 import numpy as np
 import pandas as pd
+import pdb
 from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import SGDClassifier, LinearRegression, ElasticNet
@@ -14,8 +15,9 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction import DictVectorizer
 from tqdm import tqdm
 
-import config, models
 from tools import dataset_tools, train_test
+from models import *
+from config import Config
 # from tools.feature_matrices import parse_feature_matrix
 
 from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_dir, ensure_parentdir, get_reasons
@@ -24,7 +26,7 @@ from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_di
 ### --------------------------------------------------------------------------
 
 class Explanator(object):
-    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=4, max_knn_k=100):
+    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=1, max_knn_k=100):
         self.emb_model_path = emb_model_path
         self.ground_truth_dataset_path = ground_truth_dataset_path
         self.n_jobs = n_jobs
@@ -131,13 +133,15 @@ class Explanator(object):
         test_fpath  = "{}/{}/test.tsv" .format(split_path, target_relation)
 
         # check if `test.tsv` and `train.tsv` are present
-        if not os.path.exists(test_fpath):
+        if not os.path.exists(test_fpath) or os.stat(test_fpath).st_size == 0:
             print("There is no test file for relation `{}`, skipping.".format(target_relation))
             return False
-        else:
-            if not os.path.exists(train_fpath): raise IOError('`train.tsv` not present for relation `{}`'.format(target_relation))
+        if not os.path.exists(train_fpath) or os.stat(train_fpath).st_size == 0:
+            # raise IOError('`train.tsv` not present for relation `{}`'.format(target_relation))
+            print("There is no train data for relation `{}`, skipping.".format(target_relation))
+            return False
 
-        # read train data (always present)
+        # read train data (always present - not entirely true for NELL)
         self.train_heads, self.train_tails, self.train_y, train_feat_dicts = parse_feature_matrix(train_fpath)
         v = DictVectorizer(sparse=True)
         v.fit(train_feat_dicts)
@@ -145,7 +149,7 @@ class Explanator(object):
         self.feature_names = v.get_feature_names()
 
         # read valid data (may not be present)
-        if os.path.exists(valid_fpath):
+        if os.path.exists(valid_fpath) and os.stat(valid_fpath).st_size != 0:
             valid_heads, valid_tails, valid_y, valid_feat_dicts = parse_feature_matrix(valid_fpath)
             valid_x = v.transform(valid_feat_dicts)
             # we merge validation with training data, because the GridSearchCV creates the valid split automatically
@@ -153,6 +157,7 @@ class Explanator(object):
             self.train_tails = np.concatenate((self.train_tails, valid_tails))
             self.train_y     = np.concatenate((self.train_y,     valid_y    ))
             self.train_x     = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
+            assert(self.train_y.shape[0] == self.train_x.shape[0])
 
         # read test data (always present)
         self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
@@ -162,6 +167,12 @@ class Explanator(object):
         if len(np.unique(self.train_y)) <= 1:
             print("Not possible to train explainable model in relation `{}` because training set contains a single class.".format(target_relation))
             return False
+        else:
+            for class_ in np.unique(self.train_y):
+                if len(self.train_y[self.train_y==class_]) < 3:
+                    print("Not possible to train explainable model in relation `{}` because training set contains too few examples for one of the classes.".format(target_relation))
+                    return False
+
 
         self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
 
@@ -309,7 +320,9 @@ class Explanator(object):
     def train_local_logit_for_all(self, output_path, get_local_data_func):
         results = pd.DataFrame(columns=['head', 'tail','y', 'y_hat', 'prediction'])
         for head, tail in tqdm(zip(self.test_heads, self.test_tails)):
-            results = results.append(self.train_local_logit(output_path, head, tail, get_local_data_func), ignore_index=True)
+            result = self.train_local_logit(output_path, head, tail, get_local_data_func)
+            if result:
+                results = results.append(result, ignore_index=True)
         output_filepath = os.path.join(output_path, self.target_relation, 'local_stats_logit' + '.tsv')
         ensure_parentdir(output_filepath)
         results.to_csv(output_filepath, sep='\t')
@@ -318,6 +331,9 @@ class Explanator(object):
         """Train a logistic regression model locally for the current relation and head and tail entities.
         """
         local_data = get_local_data_func(self, head, tail, y_type='labels')
+        # Check if there are enough samples
+        if local_data['x'].shape[0] < 10:
+            return None
 
         # train local logit
         gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
@@ -330,7 +346,6 @@ class Explanator(object):
         test_x = self.test_x[test_index]
         test_y = self.test_y[test_index]
         prediction = self.model.predict(test_x)
-        print "The triple has been predicted as ", prediction, " when should have been ", test_y
         if output_explanation:
             self.explain_single_example(output_path, test_x, self.model.coef_, self.test_heads[test_index], self.test_tails[test_index], prediction, test_y, self.test_true_y[test_index])
         return {'head': head,
@@ -408,8 +423,8 @@ class Explanator(object):
         else:
             answers = self.model.predict(features)
         final_reasons['y_logit'] = answers
-        final_reasons['y_hat'] = y_hat
-        final_reasons['y'] = y
+        final_reasons['y_hat'] = y_hat[index]
+        final_reasons['y'] = y[index]
         final_reasons.to_csv(os.path.join(output_path, self.target_relation + '.tsv'), sep='\t')
         return final_reasons
 
