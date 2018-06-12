@@ -76,6 +76,7 @@ def add_triples_without_features(pra_output_folder, folds_dict):
                     # add to lines to be appended
                     new_lines += "{},{}\t{}\t\n".format(row['head'], row['tail'], row['label'])
 
+            ensure_dir(os.path.join(pra_output_folder, rel))
             mode = 'a' if os.path.exists(pra_outfile_path) else 'w'
             with open(pra_outfile_path, mode) as f:
                 f.write(new_lines)
