@@ -16,9 +16,10 @@ def parse_feature_matrix(filepath):
             ent_pair, label, features = line.replace('\n', '').split('\t')
             head, tail = ent_pair.split(',')
             d = {}
-            for feat in features.split(' -#- '):
-                feat_name, value = feat.split(',')
-                d[feat_name] = float(value)
+            if features:
+                for feat in features.split(' -#- '):
+                    feat_name, value = feat.split(',')
+                    d[feat_name] = float(value)
 
             heads.append(head)
             tails.append(tail)
