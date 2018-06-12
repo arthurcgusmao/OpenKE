@@ -51,7 +51,7 @@ def read_generate_train_data(corrupted_filepath):
         print('Corrupted file already exists: {}.'.format(corrupted_filepath))
     return train2id
 
-def add_triples_without_features(pra_output_folder, folds_dict):
+def add_triples_without_features(pra_output_folder, folds_dict, skipifnotest=True):
     """Add triples that have no features to `results`.
 
     Arguments:
@@ -61,6 +61,7 @@ def add_triples_without_features(pra_output_folder, folds_dict):
     """
     for file_str,df in folds_dict.iteritems():
         for rel in df['relation'].unique():
+            if skipifnotest and not os.path.exists(os.path.join(pra_output_folder, rel, 'test.tsv')): continue
             new_lines = ""
             pra_outfile_path = os.path.join(pra_output_folder, rel, file_str)
             if os.path.exists(pra_outfile_path):
