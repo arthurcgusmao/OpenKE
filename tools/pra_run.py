@@ -71,7 +71,7 @@ def add_triples_without_features(pra_output_folder, folds_dict):
 
             # If there is not a (head,tail) pair in the feature matrix,
             # we are going to assume that PRA found no features for the example.
-            for idx,row in df.iterrows():
+            for idx,row in df.loc[df['relation'] == rel].iterrows():
                 if not (row['head'], row['tail']) in headsandtails:
                     # add to lines to be appended
                     new_lines += "{},{}\t{}\t\n".format(row['head'], row['tail'], row['label'])
@@ -337,3 +337,4 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
     add_triples_without_features(pra_outfiles_dir,
                                  folds_dict={'train.tsv': train2id, 'valid.tsv': valid2id, 'test.tsv': test2id})
     print("Done.")
+
