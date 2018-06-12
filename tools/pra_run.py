@@ -60,23 +60,25 @@ def add_triples_without_features(pra_output_folder, folds_dict):
     columns named head, relation and tail.
     """
     for file_str,df in folds_dict.iteritems():
-        new_lines = ""
-        relations = df['relation'].unique()
-        for rel in relations:
+        for rel in df['relation'].unique():
+            new_lines = ""
             pra_outfile_path = os.path.join(pra_output_folder, rel, file_str)
-            heads, tails, labels, feat_dicts = explain.helpers.parse_feature_matrix(pra_outfile_path)
-            headsandtails = zip(heads, tails)
+            if os.path.exists(pra_outfile_path):
+                heads, tails, labels, feat_dicts = explain.helpers.parse_feature_matrix(pra_outfile_path)
+                headsandtails = set(zip(heads, tails))
+            else:
+                headsandtails = set()
 
             # If there is not a (head,tail) pair in the feature matrix,
             # we are going to assume that PRA found no features for the example.
             for idx,row in df.iterrows():
-                headandtail = (row['head'], row['tail'])
-                if not headandtail in headsandtails:
+                if not (row['head'], row['tail']) in headsandtails:
                     # add to lines to be appended
                     new_lines += "{},{}\t{}\t\n".format(row['head'], row['tail'], row['label'])
 
-        with open(pra_outfile_path, 'a') as f:
-            f.write(new_lines)
+            mode = 'a' if os.path.exists(pra_outfile_path) else 'w'
+            with open(pra_outfile_path, mode) as f:
+                f.write(new_lines)
 
 
 
@@ -327,8 +329,10 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
         output, error = process.communicate()
         print output, error
 
-    print("\nIf PRA run successfully, features were extracted and saved into `{}`.".format(pra_dir_path))
-    print("Now we are going to add to results triples that have no feature.")
+    pra_outfiles_dir = os.path.join(pra_dir_path, 'results', spec_name)
+    print("\nIf PRA run successfully, features were extracted and saved into:\n`{}`".format(pra_outfiles_dir))
+    print("Now adding to results triples that have no feature...")
 
-    add_triples_without_features(os.path.join(pra_dir_path, 'results', spec_name),
+    add_triples_without_features(pra_outfiles_dir,
                                  folds_dict={'train.tsv': train2id, 'valid.tsv': valid2id, 'test.tsv': test2id})
+    print("Done.")
