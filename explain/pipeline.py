@@ -85,5 +85,5 @@ def process_overall_metrics(emb_import_paths, splits=None):
             splits = get_dirs(pra_results_path)
         for split in splits:
             output_path = os.path.join(expl_results_path, split)
-            metrics_dicts.append(get_metrics(output_path + '/overall_results.tsv', model_info))
+            metrics_dicts.append(get_metrics(output_path + '/overall_results.tsv', model_info, split))
     return metrics_dicts
