@@ -312,15 +312,15 @@ class Explanator(object):
         # weighted accuracy
         row_sum_relev_feats_test  = logits_test.getnnz(axis=-1)
         row_sum_relev_feats_train = logits_train.getnnz(axis=-1)
-        stats['Test Accuracy (Weighted # Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_relev_feats_test)
-        stats['True Test Accuracy (Weighted # Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_relev_feats_test)
-        stats['Train Accuracy (Weighted # Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_relev_feats_train)
-        stats['True Train Accuracy (Weighted # Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_relev_feats_train)
+        stats['Test Accuracy (Weighted # Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Weighted # Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Weighted # Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Weighted # Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
 
-        stats['Test Accuracy (Filter # Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_relev_feats_test > 0))
-        stats['True Test Accuracy (Filter # Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_relev_feats_test > 0))
-        stats['Train Accuracy (Filter # Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_relev_feats_train > 0))
-        stats['True Train Accuracy (Filter # Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_relev_feats_train > 0))
+        stats['Test Accuracy (Filter # Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Filter # Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Filter # Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Filter # Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
 
         return stats
 
