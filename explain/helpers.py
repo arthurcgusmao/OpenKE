@@ -83,7 +83,7 @@ def get_reasons(row, n=10):
     return output
 
 
-def get_metrics(dataframe_path, dataset_name):
+def get_metrics(dataframe_path, model_info):
     relevant_test_metrics = ['Test Accuracy',
                              'Test Embedding Accuracy',
                              'Test F1_score',
@@ -113,7 +113,9 @@ def get_metrics(dataframe_path, dataset_name):
     per_relation_metrics['test_weights'] = per_relation_metrics['# Triples Test ']/per_relation_metrics['# Triples Test '].sum()
 
     metrics_dict = {}
-    metrics_dict['dataset'] = dataset_name
+    metrics_dict['dataset_name'] = model_info['dataset_name']
+    metrics_dict['model_name'] = model_info['model_name']
+    metrics_dict['timestamp'] = model_info['timestamp']
     for metric in relevant_test_metrics:
         metrics_dict[metric + '_micro'] = np.average(per_relation_metrics[metric], weights=per_relation_metrics['test_weights'])
         metrics_dict[metric + '_macro'] = np.average(per_relation_metrics[metric])

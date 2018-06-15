@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 
+from tools import train_test
 from helpers import ensure_dir, get_dirs, get_metrics
 from Explanator import Explanator
 import local_functions as lfs
@@ -31,6 +32,7 @@ def pipeline(emb_model_path, splits=None):
     expl = Explanator(emb_model_path, ground_truth_dataset_path)
 
     for split in splits:
+        print "\n####\n{}\n####".format(emb_model_path)
         print "\nTraining on " + split + ":"
         print "======================================\n"
         split_path  = os.path.join(pra_results_path,  split)
@@ -70,18 +72,18 @@ def pipeline(emb_model_path, splits=None):
 
         # save overall results
         pd.DataFrame(results).to_csv(output_path + '/overall_results.tsv', sep='\t')
-        if 'metrics_frame' in globals():
-            global metrics_frame
-            metrics_frame = metrics_frame.append(get_metrics(output_path + '/overall_results.tsv', split), ignore_index=True)
 
 
-if __name__ == "__main__":
-    paths = ["/Users/Alvinho/openke/results/FB13/TransE/1527033688",
-             "/Users/Alvinho/openke/results/NELL186/TransE/1526711822",
-             "/Users/Alvinho/openke/results/WN11/TransE/1527008113"]
 
-    global metrics_frame
-    metrics_frame = pd.DataFrame()
-    for path in paths:
-        pipeline(path)
-        metrics_frame.to_csv('/Users/Alvinho/openke/results/global_metrics.tsv', sep='\t', index=False)
+def process_overall_metrics(emb_import_paths, splits=None):
+    metrics_dicts = []
+    for emb_model_path in emb_import_paths:
+        model_info = train_test.read_model_info(emb_model_path)
+        pra_results_path  = emb_model_path + '/pra_explain/results/'
+        expl_results_path = emb_model_path + '/pra_explain/results_explained/'
+        if splits == None:
+            splits = get_dirs(pra_results_path)
+        for split in splits:
+            output_path = os.path.join(expl_results_path, split)
+            metrics_dicts.append(get_metrics(output_path + '/overall_results.tsv', model_info))
+    return metrics_dicts

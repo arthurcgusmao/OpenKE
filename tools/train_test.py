@@ -49,6 +49,9 @@ def read_model_info(import_path):
     model_info = model_info_df.to_dict()
     for key,d in model_info.iteritems():
         model_info[key] = d[0]
+    # add timestamp to model if not present
+    if not 'timestamp' in model_info:
+        model_info['timestamp'] = os.path.abspath(import_path).split(os.sep)[-1]
     return model_info
 
 
