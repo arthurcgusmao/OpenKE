@@ -94,7 +94,12 @@ def get_metrics(dataframe_path, model_info, split):
                              'True Test F1_score',
                              'True Test Positive Ratio',
                              'True Test Precision',
-                             'True Test Recall']
+                             'True Test Recall',
+                             'Test Accuracy (Weighted # Features)',
+                             'True Test Accuracy (Weighted # Features)',
+                             'Test Accuracy (Filter # Features > 0)',
+                             'True Test Accuracy (Filter # Features > 0)',
+                             ]
 
     relevant_train_metrics = ['Train Accuracy',
                               'Train Embedding Accuracy',
@@ -106,7 +111,12 @@ def get_metrics(dataframe_path, model_info, split):
                               'True Train F1_score',
                               'True Train Positive Ratio',
                               'True Train Precision',
-                              'True Train Recall']
+                              'True Train Recall',
+                              'Train Accuracy (Weighted # Features)',
+                              'True Train Accuracy (Weighted # Features)',
+                              'Train Accuracy (Filter # Features > 0)',
+                              'True Train Accuracy (Filter # Features > 0)',
+                              ]
 
     per_relation_metrics = pd.read_csv(dataframe_path, sep='\t')
     per_relation_metrics['train_weights'] = per_relation_metrics['# Triples Train']/per_relation_metrics['# Triples Train'].sum()

@@ -251,7 +251,7 @@ class Explanator(object):
         # stats['# Triples Valid'] = ??? # we are now using the CV's validation sets
 
         # model parameters
-        stats['alpha']             = getattr_else_None(self.model, 'alpha'            ) # @TODO: check if this works
+        stats['alpha']             = getattr_else_None(self.model, 'alpha'            )
         stats['l1_ratio']          = getattr_else_None(self.model, 'l1_ratio'         )
         stats['loss']              = getattr_else_None(self.model, 'loss'             )
         stats['penalty']           = getattr_else_None(self.model, 'penalty'          )
@@ -299,6 +299,28 @@ class Explanator(object):
         # NOTE: in the future this should be changed, just because a feature has weight different
         #       than zero it doesn't necessarily mean that it is relevant. We must find a way to
         #       define this "relevance" formally.
+        logits_test  = self.test_x.multiply(self.model.coef_)
+        logits_train = self.train_x.multiply(self.model.coef_)
+        logits_test.eliminate_zeros()
+        logits_train.eliminate_zeros()
+        sum_relev_feats_test  = logits_test.getnnz()
+        sum_relev_feats_train = logits_train.getnnz()
+        stats['Total # Relevant Features / Example'] = (sum_relev_feats_train + sum_relev_feats_test) / (self.train_x.shape[0] + self.test_x.shape[0])
+        stats['Train # Relevant Features / Example'] = sum_relev_feats_train / self.train_x.shape[0]
+        stats['Test # Relevant Features / Example'] = sum_relev_feats_test / self.test_x.shape[0]
+
+        # weighted accuracy
+        row_sum_relev_feats_test  = logits_test.getnnz(axis=-1)
+        row_sum_relev_feats_train = logits_train.getnnz(axis=-1)
+        stats['Test Accuracy (Weighted # Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_relev_feats_test)
+        stats['True Test Accuracy (Weighted # Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_relev_feats_test)
+        stats['Train Accuracy (Weighted # Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_relev_feats_train)
+        stats['True Train Accuracy (Weighted # Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_relev_feats_train)
+
+        stats['Test Accuracy (Filter # Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_relev_feats_test > 0))
+        stats['True Test Accuracy (Filter # Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_relev_feats_test > 0))
+        stats['Train Accuracy (Filter # Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_relev_feats_train > 0))
+        stats['True Train Accuracy (Filter # Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_relev_feats_train > 0))
 
         return stats
 
