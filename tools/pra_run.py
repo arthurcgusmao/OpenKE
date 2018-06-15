@@ -338,4 +338,3 @@ def extract_features(emb_import_path, neg_rate, bern, feature_extractors, cuda_d
     add_triples_without_features(pra_outfiles_dir,
                                  folds_dict={'train.tsv': train2id, 'valid.tsv': valid2id, 'test.tsv': test2id})
     print("Done.")
-

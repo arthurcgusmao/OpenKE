@@ -144,20 +144,24 @@ class Explanator(object):
         # read train data (always present - not entirely true for NELL)
         self.train_heads, self.train_tails, self.train_y, train_feat_dicts = parse_feature_matrix(train_fpath)
         v = DictVectorizer(sparse=True)
-        v.fit(train_feat_dicts)
-        self.train_x = v.transform(train_feat_dicts)
-        self.feature_names = v.get_feature_names()
 
         # read valid data (may not be present)
         if os.path.exists(valid_fpath) and os.stat(valid_fpath).st_size != 0:
             valid_heads, valid_tails, valid_y, valid_feat_dicts = parse_feature_matrix(valid_fpath)
+            v.fit(train_feat_dicts + valid_feat_dicts)
+            train_x = v.transform(train_feat_dicts)
             valid_x = v.transform(valid_feat_dicts)
             # we merge validation with training data, because the GridSearchCV creates the valid split automatically
             self.train_heads = np.concatenate((self.train_heads, valid_heads))
             self.train_tails = np.concatenate((self.train_tails, valid_tails))
             self.train_y     = np.concatenate((self.train_y,     valid_y    ))
-            self.train_x     = vstack((self.train_x, valid_x)) # concatenate the sparse matrices vertically
+            self.train_x     = vstack((train_x, valid_x)) # concatenate the sparse matrices vertically
             assert(self.train_y.shape[0] == self.train_x.shape[0])
+        else:
+            v.fit(train_feat_dicts)
+            self.train_x = v.transform(train_feat_dicts)
+
+        self.feature_names = v.get_feature_names()
 
         # read test data (always present)
         self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
