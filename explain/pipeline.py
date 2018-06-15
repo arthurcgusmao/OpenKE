@@ -31,7 +31,8 @@ def pipeline(emb_model_path, splits=None):
     expl = Explanator(emb_model_path, ground_truth_dataset_path)
 
     for split in splits:
-        print "\nTraining on " + split
+        print "\nTraining on " + split + ":"
+        print "======================================\n"
         split_path  = os.path.join(pra_results_path,  split)
         output_path = os.path.join(expl_results_path, split)
         ensure_dir(output_path)

@@ -179,6 +179,7 @@ class Explanator(object):
         # check that there is at least one feature for the training set, otherwise it's not possible to fit the GS
         if self.train_x.shape[-1] == 0:
             print("Not possible to fit relation `{}` because no training/valid examples have features.".format(target_relation))
+            return False
 
 
         self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
