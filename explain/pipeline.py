@@ -31,7 +31,7 @@ def pipeline(emb_model_path, splits=None):
     expl = Explanator(emb_model_path, ground_truth_dataset_path)
 
     for split in splits:
-        print "Training on " + split + " data: "
+        print "\nTraining on " + split
         split_path  = os.path.join(pra_results_path,  split)
         output_path = os.path.join(expl_results_path, split)
         ensure_dir(output_path)
@@ -40,9 +40,10 @@ def pipeline(emb_model_path, splits=None):
         results = []
 
         for target_relation in target_relations:
-            print("     Loading data for `{}`...".format(target_relation))
+            print("\tProcessing `{}`... ".format(target_relation)),
 
             if expl.load_data(split_path, target_relation):
+                print("Loaded... "),
 
                 # global logit
                 expl.train_global_logit()
@@ -62,8 +63,9 @@ def pipeline(emb_model_path, splits=None):
 
                 # local regression
                 # expl.train_local_regression_for_all(output_path, lfs.get_local_train_data)
+                print("Processed.")
             else:
-                print("Could not load data for `{}`. Skipping relation...".format(target_relation))
+                print("\tCould not load data for `{}`. Skipping relation...".format(target_relation))
 
         # save overall results
         pd.DataFrame(results).to_csv(output_path + '/overall_results.tsv', sep='\t')

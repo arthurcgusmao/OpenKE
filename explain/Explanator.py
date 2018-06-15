@@ -176,6 +176,9 @@ class Explanator(object):
                 if len(self.train_y[self.train_y==class_]) < 3:
                     print("Not possible to train explainable model in relation `{}` because training set contains too few examples for one of the classes.".format(target_relation))
                     return False
+        # check that there is at least one feature for the training set, otherwise it's not possible to fit the GS
+        if self.train_x.shape[-1] == 0:
+            print("Not possible to fit relation `{}` because no training/valid examples have features.".format(target_relation))
 
 
         self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
