@@ -141,4 +141,4 @@ def get_metrics(dataframe_path, model_info, split):
 
 def nanaverage(a, weights=None):
     indices = ~np.isnan(a)
-    np.average(a[indices], weights=weights[indices])
+    return np.average(a[indices], weights=weights[indices])
