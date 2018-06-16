@@ -176,11 +176,6 @@ class Explanator(object):
                 if len(self.train_y[self.train_y==class_]) < 3:
                     print("Not possible to train explainable model in relation `{}` because training set contains too few examples for one of the classes.".format(target_relation))
                     return False
-        # check that there is at least one feature for the training set, otherwise it's not possible to fit the GS
-        if self.train_x.shape[-1] == 0:
-            print("Not possible to fit relation `{}` because no training/valid examples have features.".format(target_relation))
-            return False
-
 
         self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
 
@@ -328,9 +323,13 @@ class Explanator(object):
     def train_global_logit(self):
         """Trains a logistic regression model globally for the current relation.
         """
-        gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
-        gs.fit(self.train_x, self.train_y)
-        self.model = gs.best_estimator_
+        # check that there is at least one feature for the training set, otherwise it's not possible to fit the GS
+        if self.train_x.shape[-1] == 0:
+            self.model = self.PriorClassifier(self.train_x, self.train_y)
+        else:
+            gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
+            gs.fit(self.train_x, self.train_y)
+            self.model = gs.best_estimator_
         self.model_name = 'global_logit'
 
 
@@ -496,3 +495,15 @@ class Explanator(object):
             output_filepath = os.path.join(output_dir,  '{}.tsv'.format(self.target_relation))
             ensure_dir(output_dir)
             self.explanation.to_csv(output_filepath, sep='\t', columns=['weight', 'feature'], index=False)
+
+    def PriorClassifier(self, X, y):
+        """Returns a dummy classifier that is used when no features are present in training/validation. """
+        clf = DummyClassifier(strategy='prior')
+        if X.shape[-1] == 0:
+            print 'here'
+            X = np.zeros(X.shape[:-1] + (1,))
+        clf.fit(X, y)
+        clf.coef_ = np.array([[0]])
+        proba = clf.predict_proba([[1]])[-1][-1] # get probability of predicting 1, which will be always the same regardless of X
+        clf.intercept_ = math.log(proba/(1-proba)) # apply logit to probability in order to get the intercept
+        return clf
