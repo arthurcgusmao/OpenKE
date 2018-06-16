@@ -1,6 +1,7 @@
 from __future__ import division
 import os
 import time
+import math
 import itertools
 import multiprocessing
 import numpy as np
@@ -13,6 +14,7 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.dummy import DummyClassifier
 from tqdm import tqdm
 
 from tools import dataset_tools, train_test
@@ -325,7 +327,8 @@ class Explanator(object):
         """
         # check that there is at least one feature for the training set, otherwise it's not possible to fit the GS
         if self.train_x.shape[-1] == 0:
-            self.model = self.PriorClassifier(self.train_x, self.train_y)
+            self.model = PriorClassifier()
+            self.model.fit(self.train_x, self.train_y)
         else:
             gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
             gs.fit(self.train_x, self.train_y)
@@ -496,14 +499,30 @@ class Explanator(object):
             ensure_dir(output_dir)
             self.explanation.to_csv(output_filepath, sep='\t', columns=['weight', 'feature'], index=False)
 
-    def PriorClassifier(self, X, y):
-        """Returns a dummy classifier that is used when no features are present in training/validation. """
-        clf = DummyClassifier(strategy='prior')
+
+class PriorClassifier(object):
+    """Returns a dummy classifier that is used when no features are present in training/validation.
+    """
+    def __init__(self):
+        self.clf = DummyClassifier(strategy='prior')
+
+    def fit(self, X, y):
+        self.clf.fit(self._adapt_X(X), y)
+        # self.coef_ = np.array([[0]])
+        self.coef_ = np.array([])
+        proba = self.clf.class_prior_[-1] # get probability of predicting 1, which will be always the same regardless of X
+        self.intercept_ = math.log(proba/(1-proba)) # apply logit to probability in order to get the intercept
+
+    def _adapt_X(self, X):
         if X.shape[-1] == 0:
-            print 'here'
             X = np.zeros(X.shape[:-1] + (1,))
-        clf.fit(X, y)
-        clf.coef_ = np.array([[0]])
-        proba = clf.predict_proba([[1]])[-1][-1] # get probability of predicting 1, which will be always the same regardless of X
-        clf.intercept_ = math.log(proba/(1-proba)) # apply logit to probability in order to get the intercept
-        return clf
+        return X
+
+    def predict(self, X):
+        return self.clf.predict(self._adapt_X(X))
+
+    def predict_proba(self, X):
+        return self.clf.predict_proba(self._adapt_X(X))
+
+    def score(self, X, y, sample_weight=None):
+        return self.clf.score(self._adapt_X(X), y, sample_weight)
