@@ -126,11 +126,11 @@ def get_metrics(dataframe_path, model_info, split):
 
     # calculate averages ignoring nans (which can happen for metrics that are weighted or filtered).
     for metric in relevant_test_metrics:
-        metrics_dict[metric + '_micro'] = np.nanmean(per_relation_metrics[metric], weights=per_relation_metrics['test_weights'])
-        metrics_dict[metric + '_macro'] = np.nanmean(per_relation_metrics[metric])
+        metrics_dict[metric + '_micro'] = nanaverage(per_relation_metrics[metric], weights=per_relation_metrics['test_weights'])
+        metrics_dict[metric + '_macro'] = nanaverage(per_relation_metrics[metric])
     for metric in relevant_train_metrics:
-        metrics_dict[metric + '_micro'] = np.nanmean(per_relation_metrics[metric], weights=per_relation_metrics['train_weights'])
-        metrics_dict[metric + '_macro'] = np.nanmean(per_relation_metrics[metric])
+        metrics_dict[metric + '_micro'] = nanaverage(per_relation_metrics[metric], weights=per_relation_metrics['train_weights'])
+        metrics_dict[metric + '_macro'] = nanaverage(per_relation_metrics[metric])
 
     metrics_dict['dataset_name'] = model_info['dataset_name']
     metrics_dict['model_name'] = model_info['model_name']
@@ -138,3 +138,7 @@ def get_metrics(dataframe_path, model_info, split):
     metrics_dict['split'] = split
 
     return metrics_dict
+
+def nanaverage(a, weights):
+    indices = ~np.isnan(a)
+    np.average(a[indices], weights=weights[indices])
