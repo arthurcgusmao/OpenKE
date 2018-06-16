@@ -41,7 +41,7 @@ class Explanator(object):
             'max_iter': [100000],
             'tol': [1e-3],
             'class_weight': ["balanced"],
-            'n_jobs': [n_jobs]
+            'n_jobs': [n_jobs],
         }]
         self.param_grid_regression = [{
             'l1_ratio': [.1, .5, .7, .9, .95, .99, 1],
@@ -330,7 +330,7 @@ class Explanator(object):
             self.model = PriorClassifier()
             self.model.fit(self.train_x, self.train_y)
         else:
-            gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
+            gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs, refit=True, cv=8)
             gs.fit(self.train_x, self.train_y)
             self.model = gs.best_estimator_
         self.model_name = 'global_logit'
@@ -368,7 +368,7 @@ class Explanator(object):
             return None
 
         # train local logit
-        gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs)
+        gs = GridSearchCV(SGDClassifier(), self.param_grid_logit, n_jobs=self.n_jobs, refit=True, cv=8)
         gs.fit(local_data['x'], local_data['y'])
         self.model = gs.best_estimator_
         self.model_name = 'local_logit'
