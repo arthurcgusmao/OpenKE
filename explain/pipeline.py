@@ -2,8 +2,9 @@ import os
 import pandas as pd
 
 from tools import train_test
-from helpers import ensure_dir, get_dirs, get_metrics
+from helpers import ensure_dir, get_dirs
 from Explanator import Explanator
+from metrics import calc_metrics, calc_overall_metrics
 import local_functions as lfs
 
 
@@ -52,13 +53,13 @@ def pipeline(emb_model_path, splits=None):
                 expl.train_global_logit()
                 expl.explain_model(output_path=output_path)
                 # expl.explain_per_example(output_path)
-                results.append(expl.get_results())
+                results.append(calc_metrics(expl))
 
                 # global regression
                 # expl.train_global_regression()
                 # expl.explain_model(output_path=output_path)
                 # expl.explain_per_example(output_path)
-                # results.append(expl.get_results())
+                # results.append(calc_metrics(expl))
 
                 # local models
                 # local logit
@@ -85,5 +86,5 @@ def process_overall_metrics(emb_import_paths, splits=None):
             splits = get_dirs(pra_results_path)
         for split in splits:
             output_path = os.path.join(expl_results_path, split)
-            metrics_dicts.append(get_metrics(output_path + '/overall_results.tsv', model_info, split))
+            metrics_dicts.append(calc_overall_metrics(output_path + '/overall_results.tsv', model_info, split))
     return metrics_dicts
