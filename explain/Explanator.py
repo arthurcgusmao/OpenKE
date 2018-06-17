@@ -164,6 +164,7 @@ class Explanator(object):
             self.train_x = v.transform(train_feat_dicts)
 
         self.feature_names = v.get_feature_names()
+        self.feature_lens = np.array([len(fname.strip('-').split('-')) for fname in self.feature_names])
 
         # read test data (always present)
         self.test_heads, self.test_tails, self.test_y, test_feat_dicts = parse_feature_matrix(test_fpath)
@@ -291,7 +292,7 @@ class Explanator(object):
         stats['Train Embedding Accuracy']   = self.train_y[self.train_y == self.train_true_y].shape[0]/self.train_y.shape[0]
         stats['Test Embedding Accuracy']    = self.test_y[ self.test_y == self.test_true_y  ].shape[0]/self.test_y.shape[0]
 
-        # relevant features
+        # RELEVANT FEATURES
         stats['# Relevant Features'] = self.explanation[self.explanation['weight'] != 0].shape[0]
         # NOTE: in the future this should be changed, just because a feature has weight different
         #       than zero it doesn't necessarily mean that it is relevant. We must find a way to
@@ -300,25 +301,82 @@ class Explanator(object):
         logits_train = self.train_x.multiply(self.model.coef_)
         logits_test.eliminate_zeros()
         logits_train.eliminate_zeros()
-        sum_relev_feats_test  = logits_test.getnnz()
-        sum_relev_feats_train = logits_train.getnnz()
-        stats['Total # Relevant Features / Example'] = (sum_relev_feats_train + sum_relev_feats_test) / (self.train_x.shape[0] + self.test_x.shape[0])
-        stats['Train # Relevant Features / Example'] = sum_relev_feats_train / self.train_x.shape[0]
-        stats['Test # Relevant Features / Example'] = sum_relev_feats_test / self.test_x.shape[0]
 
-        # weighted accuracy
+        # sum of all non-zero features for each row
+        row_sum_feats_test  = self.test_x.getnnz(axis=-1)
+        row_sum_feats_train = self.train_x.getnnz(axis=-1)
+        # sum of all non-zero relevant features for each row
         row_sum_relev_feats_test  = logits_test.getnnz(axis=-1)
         row_sum_relev_feats_train = logits_train.getnnz(axis=-1)
-        stats['Test Accuracy (Weighted # Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
-        stats['True Test Accuracy (Weighted # Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
-        stats['Train Accuracy (Weighted # Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
-        stats['True Train Accuracy (Weighted # Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
 
-        stats['Test Accuracy (Filter # Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
-        stats['True Test Accuracy (Filter # Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
-        stats['Train Accuracy (Filter # Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
-        stats['True Train Accuracy (Filter # Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
+        # sum of all non-zero features
+        sum_feats_test  = self.test_x.getnnz()
+        sum_feats_train = self.train_x.getnnz()
+        # sum of all non-zero relevant features
+        sum_relev_feats_test  = logits_test.getnnz()
+        sum_relev_feats_train = logits_train.getnnz()
 
+        # number of rows that have at least one feature
+        n_rows_feats_test  = (row_sum_feats_test > 0).sum()
+        n_rows_feats_train = (row_sum_feats_train > 0).sum()
+        # number of rows that have at least one relevant feature
+        n_rows_relev_feats_test  = (row_sum_relev_feats_test > 0).sum()
+        n_rows_relev_feats_train = (row_sum_relev_feats_train > 0).sum()
+
+        n_examples_test  = self.test_x.shape[0]
+        n_examples_train = self.train_x.shape[0]
+        n_examples_total = n_examples_train + n_examples_test
+
+        # number of features per example
+        stats['Test # Features / Example'] = sum_feats_test / n_examples_test
+        stats['Train # Features / Example'] = sum_feats_train / n_examples_train
+        stats['Total # Features / Example'] = (sum_feats_train + sum_feats_test) / n_examples_total
+        # number of relevant features per example
+        stats['Test # Relevant Features / Example'] = sum_relev_feats_test / n_examples_test
+        stats['Train # Relevant Features / Example'] = sum_relev_feats_train / n_examples_train
+        stats['Total # Relevant Features / Example'] = (sum_relev_feats_train + sum_relev_feats_test) / n_examples_total
+
+        # number of triples for the filtered cases
+        # (these metrics are used to calculate the micro average later)
+        stats['# Triples Test  (Filter # Features > 0)'] = n_rows_feats_test
+        stats['# Triples Train (Filter # Features > 0)'] = n_rows_feats_train
+        stats['# Triples Test  (Filter # Relevant Features > 0)'] = n_rows_relev_feats_test
+        stats['# Triples Train (Filter # Relevant Features > 0)'] = n_rows_relev_feats_train
+
+        # ratio of triples that have at least one feature
+        stats['Test % Examples with # Features > 0'] = n_rows_feats_test / n_examples_test
+        stats['Train % Examples with # Features > 0'] = n_rows_feats_train / n_examples_train
+        stats['Total % Examples with # Features > 0'] = (n_rows_feats_train + n_rows_feats_test) / n_examples_total
+        # ratio of triples that have at least one relevant feature
+        stats['Test % Examples with # Relevant Features > 0'] = n_rows_relev_feats_test / n_examples_test
+        stats['Train % Examples with # Relevant Features > 0'] = n_rows_relev_feats_train / n_examples_train
+        stats['Total % Examples with # Relevant Features > 0'] = (n_rows_relev_feats_train + n_rows_relev_feats_test) / n_examples_total
+
+        # accuracy weighted by number of features
+        stats['Test Accuracy (Weighted # Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_feats_test) if row_sum_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Weighted # Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_feats_test) if row_sum_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Weighted # Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_feats_train) if row_sum_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Weighted # Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_feats_train) if row_sum_feats_train.sum() > 0 else np.nan
+        # accuracy weighted by number of relevant features
+        stats['Test Accuracy (Weighted # Relevant Features)']           = self.model.score(self.test_x,  self.test_y,       sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Weighted # Relevant Features)']      = self.model.score(self.test_x,  self.test_true_y,  sample_weight=row_sum_relev_feats_test) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Weighted # Relevant Features)']          = self.model.score(self.train_x, self.train_y,      sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Weighted # Relevant Features)']     = self.model.score(self.train_x, self.train_true_y, sample_weight=row_sum_relev_feats_train) if row_sum_relev_feats_train.sum() > 0 else np.nan
+
+        # filtered accuracy (only examples with # Features > 0)
+        stats['Test Accuracy (Filter # Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_feats_test > 0)) if row_sum_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Filter # Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_feats_test > 0)) if row_sum_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Filter # Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_feats_train > 0)) if row_sum_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Filter # Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_feats_train > 0)) if row_sum_feats_train.sum() > 0 else np.nan
+        # filtered accuracy (only examples with # Relevant Features > 0)
+        stats['Test Accuracy (Filter # Relevant Features > 0)']         = self.model.score(self.test_x,  self.test_y,       sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['True Test Accuracy (Filter # Relevant Features > 0)']    = self.model.score(self.test_x,  self.test_true_y,  sample_weight=(row_sum_relev_feats_test > 0)) if row_sum_relev_feats_test.sum() > 0 else np.nan
+        stats['Train Accuracy (Filter # Relevant Features > 0)']        = self.model.score(self.train_x, self.train_y,      sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
+        stats['True Train Accuracy (Filter # Relevant Features > 0)']   = self.model.score(self.train_x, self.train_true_y, sample_weight=(row_sum_relev_feats_train > 0)) if row_sum_relev_feats_train.sum() > 0 else np.nan
+
+        # mean rule length
+        stats['Test Mean Rule Length (Filter # Relevant Features > 0)']  = (logits_test != 0).multiply(self.feature_lens).sum() / sum_relev_feats_test # sum of all rule lengths over the number of examples with at least one feature
+        stats['Train Mean Rule Length (Filter # Relevant Features > 0)'] = (logits_train != 0).multiply(self.feature_lens).sum() / sum_relev_feats_train # sum of all rule lengths over the number of examples with at least one feature
         return stats
 
 
