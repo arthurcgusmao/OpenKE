@@ -1,17 +1,11 @@
 from __future__ import division
 import os
-import time
 import math
-import itertools
-import multiprocessing
 import numpy as np
 import pandas as pd
-import pdb
 from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import SGDClassifier, LinearRegression, ElasticNet
-from sklearn.preprocessing import normalize
-from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.dummy import DummyClassifier
@@ -22,7 +16,7 @@ from models import *
 from config import Config
 # from tools.feature_matrices import parse_feature_matrix
 
-from helpers import parse_feature_matrix, getattr_else_None, get_dirs, ensure_dir, ensure_parentdir, get_reasons
+from helpers import parse_feature_matrix, get_dirs, ensure_dir, ensure_parentdir, get_reasons
 
 ### --------------------------------------------------------------------------
 ### --------------------------------------------------------------------------
