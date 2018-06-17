@@ -8,7 +8,7 @@ from metrics import calc_metrics, calc_overall_metrics
 import local_functions as lfs
 
 
-def pipeline(emb_model_path, splits=None):
+def pipeline(emb_model_path, splits=None, adapt_run_sfe_wo_emb=False):
     """Runs a pipeline for producing explanations with different models for an embedding model.
 
     Arguments:
@@ -16,21 +16,31 @@ def pipeline(emb_model_path, splits=None):
     - `splits`: (list) directory names (inside `/pra_explain/results`) for which the pipeline
                        should be run.
     """
-    # read model information
-    model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
-    ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name'].iloc[0]
+    if not adapt_run_sfe_wo_emb:
+        # read model information
+        model_info = pd.read_csv(emb_model_path + '/model_info.tsv', sep='\t')
+        ground_truth_dataset_path = './benchmarks/' + model_info['dataset_name'].iloc[0]
 
-    # define directory path variables
-    pra_results_path  = emb_model_path + '/pra_explain/results/'
-    expl_results_path = emb_model_path + '/pra_explain/results_explained/'
-    ensure_dir(expl_results_path)
+        # define directory path variables
+        pra_results_path  = emb_model_path + '/pra_explain/results/'
+        expl_results_path = emb_model_path + '/pra_explain/results_explained/'
+        ensure_dir(expl_results_path)
+    else:
+        # in this case emb_model_path is actually a dataset path
+        ground_truth_dataset_path = emb_model_path
+        pra_results_path  = emb_model_path + '/pra/results/'
+        expl_results_path = emb_model_path + '/pra/results_explained/'
+        ensure_dir(expl_results_path)
 
     # get a list of splits (different feature extractions, e.g., using G and G_hat) to run if not provided
     if splits == None:
         splits = get_dirs(pra_results_path)
 
-    # instantiate Explanator for this model
-    expl = Explanator(emb_model_path, ground_truth_dataset_path)
+    if not adapt_run_sfe_wo_emb:
+        # instantiate Explanator for this model
+        expl = Explanator(emb_model_path, ground_truth_dataset_path)
+    else:
+        expl = Explanator(None, ground_truth_dataset_path)
 
     for split in splits:
         print "\n####\n{}\n####".format(emb_model_path)
@@ -73,6 +83,7 @@ def pipeline(emb_model_path, splits=None):
 
         # save overall results
         pd.DataFrame(results).to_csv(output_path + '/overall_results.tsv', sep='\t')
+    print("Pipeline finished.")
 
 
 
@@ -82,6 +93,27 @@ def process_overall_metrics(emb_import_paths, splits=None):
         model_info = train_test.read_model_info(emb_model_path)
         pra_results_path  = emb_model_path + '/pra_explain/results/'
         expl_results_path = emb_model_path + '/pra_explain/results_explained/'
+        if splits == None:
+            splits = get_dirs(pra_results_path)
+        for split in splits:
+            output_path = os.path.join(expl_results_path, split)
+            metrics_dicts.append(calc_overall_metrics(output_path + '/overall_results.tsv', model_info, split))
+    return metrics_dicts
+
+def process_overall_metrics_wo_emb(dataset_paths, splits=None):
+    """Same as above but for when SFE was run directly on the dataset (not
+    explaining an embedding model).
+    """
+    metrics_dicts = []
+    for dataset_path in dataset_paths:
+        # we have to make up model_info ourselves
+        model_info = {
+            'dataset_name': dataset_path.strip('/').split('/')[-1],
+            'model_name': '-',
+            'timestamp': '-',
+        }
+        pra_results_path  = dataset_path + '/pra/results/'
+        expl_results_path = dataset_path + '/pra/results_explained/'
         if splits == None:
             splits = get_dirs(pra_results_path)
         for split in splits:

@@ -3,6 +3,7 @@ import os
 import math
 import numpy as np
 import pandas as pd
+import multiprocessing
 from scipy.sparse import vstack
 from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import SGDClassifier, LinearRegression, ElasticNet
@@ -12,17 +13,15 @@ from sklearn.dummy import DummyClassifier
 from tqdm import tqdm
 
 from tools import dataset_tools, train_test
-from models import *
-from config import Config
-# from tools.feature_matrices import parse_feature_matrix
-
 from helpers import parse_feature_matrix, get_dirs, ensure_dir, ensure_parentdir, get_reasons
 
-### --------------------------------------------------------------------------
-### --------------------------------------------------------------------------
 
 class Explanator(object):
-    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=1, max_knn_k=100):
+    def __init__(self, emb_model_path, ground_truth_dataset_path, n_jobs=multiprocessing.cpu_count(), max_knn_k=100):
+        """
+        Note: `emb_model_path` can be None. This means that we want to run SFE directly on a dataset
+              (benchmark), instead of running it to explain an embedding model.
+        """
         self.emb_model_path = emb_model_path
         self.ground_truth_dataset_path = ground_truth_dataset_path
         self.n_jobs = n_jobs
@@ -47,7 +46,7 @@ class Explanator(object):
         self.entity2id, self.id2entity = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path,'entity2id.txt'))
         self.relation2id, self.id2relation = dataset_tools.read_name2id_file(os.path.join(ground_truth_dataset_path, 'relation2id.txt'))
         # get the embedding model
-        if not hasattr(self, 'emb_model'):
+        if emb_model_path and not hasattr(self, 'emb_model'):
             self.emb_model = train_test.restore_model(self.emb_model_path)
             self.emb_model.calculate_thresholds()
 
@@ -175,7 +174,6 @@ class Explanator(object):
                     return False
 
         self.load_ground_truth_labels(self.ground_truth_dataset_path, target_relation)
-
         return True
 
 
