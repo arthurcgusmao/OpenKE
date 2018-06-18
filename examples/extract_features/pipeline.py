@@ -1,11 +1,4 @@
-import os,sys,inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-grandparentdir = os.path.dirname(parentdir)
-sys.path.insert(0,grandparentdir)
-
 from tools import pra_run
-
 
 def pipeline(emb_import_paths):
     for emb_import_path in emb_import_paths:
@@ -40,9 +33,8 @@ def pipeline(emb_import_paths):
             data_to_use='onefold'
         )
 
-
 emb_import_paths = [
-    '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/WN11/TransE/1527008113',
+#    '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/WN11/TransE/1527008113',
     '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/FB13/TransE/1527033688',
     '/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/NELL186/TransE/1526711822',
 ]
