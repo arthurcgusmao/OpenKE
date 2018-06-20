@@ -10,7 +10,7 @@ This code is still under development and backward compatibility for past commits
 
 ## License
 
-This code was built from [this commit](https://github.com/arthurcgusmao/XKE/commit/99032f5fffa1644cd73e51e99a7347160b83d028) of [OpenKE](https://github.com/thunlp/OpenKE), which is distributed under the [MIT License](https://github.com/thunlp/OpenKE/blob/master/LICENSE). All code developed thereafter is distributed under the terms of the GNU General Public License, version 3 (or, at your choosing, any later version of that license). You can find the text of that license [here](https://github.com/arthurcgusmao/XKE/LICENSE).
+This code was built from [this commit](https://github.com/arthurcgusmao/XKE/commit/99032f5fffa1644cd73e51e99a7347160b83d028) of [OpenKE](https://github.com/thunlp/OpenKE), which is distributed under the [MIT License](https://github.com/thunlp/OpenKE/blob/master/LICENSE). All code developed thereafter is distributed under the terms of the GNU General Public License, version 3 (or, at your choosing, any later version of that license). You can find the text of that license [here](https://github.com/arthurcgusmao/XKE/blob/xke-master/LICENSE).
 
 ## Examples
 
