@@ -2,7 +2,7 @@
 
 This is a heavily modified fork of [OpenKE](https://github.com/thunlp/OpenKE). This repository contains implementations of XKE-PRED and XKE-TRUE, as used in the paper:
 
-- Interpreting Embedding Models of Knowledge Bases: A Pedagogical Approach. Arthur Colombini Gusmão, Alvaro Henrique Chaim Correia, Glauber De Bona, and Fabio Gagliardi Cozman. WHI 2018. ([link to arXiv -- to be added]())
+- Arthur Colombini Gusmão, Alvaro Henrique Chaim Correia, Glauber De Bona, and Fabio Gagliardi Cozman. Interpreting Embedding Models of Knowledge Bases: A Pedagogical Approach. Proceedings of the ICML Workshop on Human Interpretability in Machine Learning, pp. 79-86, 2018. [Link](https://arxiv.org/abs/1806.09504)
 
 ## Note
 
