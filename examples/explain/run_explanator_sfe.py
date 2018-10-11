@@ -7,9 +7,6 @@ from tools import train_test
 
 
 emb_import_paths = [
-#     "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/WN11/TransE/1527008113",
-#    "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/FB13/TransE/1527033688",
-#    "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/results/NELL186/TransE/1526711822",
     "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/FB13/",
     "/home/arthurcgusmao/Projects/xkbc/algorithms/OpenKE/benchmarks/NELL186/",
 ]

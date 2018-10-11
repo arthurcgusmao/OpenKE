@@ -13,25 +13,25 @@ sys.path.insert(0, xke_root)
 
 from tools import train_test
 
-train_test.grid_search({
+train_test.grid_search([{
 
     ### NECESSARY hyperparameters
     ### -------------------------
-    'dataset_name'      : ['FB13', 'NELL186'],
+    'dataset_name'      : ['WN18'],
     'model_name'        : "TransE",
 
-    'batch_size'                 : 2048,
-    # 'n_batches'                  : 100, # number of batches
-    'n_epochs'                   : 3, # epochs
-    'learning_rate'              : 0.001,
-    'k'                          : 5, # embedding dimension
-    'opt_method'                 : 'adam',
+    # 'batch_size'                 : 2048,
+    'n_batches'                  : 100, # number of batches
+    'n_epochs'                   : 1000, # epochs
+    'learning_rate'              : [0.1, 0.01],
+    'k'                          : 20, # embedding dimension
+    'opt_method'                 : 'adagrad',
 
 
     ### OPTIONAL or MODEL DEPENDENT hyperparameters
     ### -------------------------------------------
-    'margin'                     : 1.0,  # for most models
-    'score_norm'                 : 'l2', # for TransX models
+    'margin'                     : 2.0,  # for most models
+    'score_norm'                 : 'l1', # for TransX models
     # 'embedding_initialization'   : 'TransE/1524490825', # initialize parameters from another model
     # 'regul_weight'               : 0.001, # the regularization weight in the loss function
 
@@ -46,7 +46,7 @@ train_test.grid_search({
     # 'shuffle'                    : 1, # (defaults to 1) Shuffle training set (each epoch) instead of randomly sampling from it
 
     ### test settings
-    'test_link_prediction'   : True, # (defaults to True)
+    # 'test_link_prediction'   : True, # (defaults to True)
     # 'test_triple_class'      : True, # (defautls to True)
 
     ### logging settings
@@ -56,8 +56,8 @@ train_test.grid_search({
 
     ### GPU and CPU settings
     # 'work_threads'    : multiprocessing.cpu_count(), # (defaults to multiprocessing.cpu_count())
-    # 'cuda_device'     : 0, # (no default value -- not necessary)
+    'cuda_device'     : 1, # (no default value -- not necessary)
 
-    ### NOTES
-    # 'note': ''
-})
+    # notes
+    'note': 'following TransE and HolE papers',
+}])
