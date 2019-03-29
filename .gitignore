@@ -138,3 +138,6 @@ venv.bak/
 
 # Results directory
 results/
+
+# Release directory
+release/
