@@ -1,4 +1,6 @@
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('agg')
+from matplotlib import pyplot as plt
 
 
 def plot_learning_curve(learning_curve, model_info, export_path=None):
