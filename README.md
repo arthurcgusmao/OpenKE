@@ -4,9 +4,9 @@ This is a heavily modified fork of [OpenKE](https://github.com/thunlp/OpenKE). T
 
 - Arthur Colombini Gusmão, Alvaro Henrique Chaim Correia, Glauber De Bona, and Fabio Gagliardi Cozman. Interpreting Embedding Models of Knowledge Bases: A Pedagogical Approach. Proceedings of the ICML Workshop on Human Interpretability in Machine Learning, pp. 79-86, 2018. [Link](https://arxiv.org/abs/1806.09504)
 
-## Note
+## Disclaimer
 
-This code is still under development and backward compatibility for past commits is not to be expected. A few hardcoded paths are still present in some files, but they can easily be changed to adapt the framework to your environment.
+Backward compatibility for past commits is not to be expected.
 
 ## License
 
